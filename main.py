@@ -167,7 +167,7 @@ class Window(arcade.Window):
         if arcade.key.D in self.keys:
             dv += Vec2(acc, 0.0)
         dp = self.player.pos-self.mouse_pos
-        self.player.angle = math.atan(dp.x/dp.y)
+        self.player.angle = math.degrees(math.atan(dp.x/dp.y))
         self.player.update_vel(dv, acc*10)
         self.player.update(dt)
 
