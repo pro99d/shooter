@@ -1,4 +1,5 @@
 import os
+import random
 import arcade
 import arcade.gl
 import time
@@ -39,6 +40,8 @@ class Vec2:
             return Vec2(self.x*other, self.y*other)
     def __repr__(self) -> str:
         return f"Vec2(x= {self.x}, y= {self.y})"
+    def __list__(self):
+        return [self.x, self.y]
 
 class Rect:
     def __init__(self, pos: Vec2, size: Vec2, ctx):
@@ -96,13 +99,13 @@ class Entity:
         self.size = size
         self.angle = 0
         self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
-        self.velocity = Vec2(0.0, 0.0)
+        self.velocity: Vec2 = Vec2(0.0, 0.0)
         self.color = color
     
     def draw(self):
         arcade.draw_rect_filled(self.rect, self.color, self.angle)
     
-    def update(self, dt):
+    def update(self, dt: float):
         self.pos += self.velocity*dt
         self.rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
 
@@ -121,9 +124,19 @@ class Bullet(Entity):
             color= (255, 255, 255),
             ctx= ctx
         )
-        
-        self.angle = math.radians(angle)
-        self.velocity = Vec2(math.cos(self.angle)*vel, math.sin(self.angle)*vel)
+        # self.damage = damage
+        self.angle = angle 
+        angle = math.radians(-angle-90)
+        self.velocity = Vec2(math.cos(angle)*vel, math.sin(angle)*vel)
+        self.lifetime = 0
+        self.max_lfetime = 10
+    
+    def update(self, dt, bul_list: list[Bullet]):
+        self.lifetime+=dt
+        super().update(dt)
+        if self.lifetime > self.max_lfetime:
+            bul_list.remove(self)
+
 
 class Player(Entity):
     def __init__(self, pos: Vec2, size: Vec2, ctx):
@@ -133,22 +146,34 @@ class Player(Entity):
             color= (0, 255, 0),
             ctx= ctx
         )
+        self.ctx = ctx
         self.mass = 1
         self.shoot_prop = {
             "bullets": 1,
             "spread": 15, # degrees
-            "speed": 1 
+            "reload": 0.5
         }
         self.last_shot = 0
         self.bullets = []
+        self.velocity: Vec2 = Vec2(0, 0)
 
     def shoot(self):
-        if time.time()-self.last_shot >= self.shoot_prop["speed"]:
-            pass 
-    
+        if time.time()-self.last_shot >= self.shoot_prop["reload"]:
+            s = self.shoot_prop["spread"]/2
+            self.bullets.append(
+                Bullet(self.pos, Vec2(10, 20), 600, self.angle+random.uniform(-s, s), self.ctx)
+            )
+            self.last_shot = time.time()
+
     def update(self, dt):
         self.velocity *= 0.95
         super().update(dt)
+        for bul in self.bullets:
+            bul.update(dt, self.bullets)
+    def draw(self):
+        super().draw()
+        for bul in self.bullets:
+            bul.draw()
 
 class Window(arcade.Window):
     def __init__(self):
@@ -167,6 +192,9 @@ class Window(arcade.Window):
         )
         self.keys = set()
         self.mouse_pos = Vec2(0, 0)
+        self.shoot = False
+        p = self.player.pos
+        self.cam = arcade.Camera2D(position = [p.x, p.y])
     def on_resize(self, w, h):
         self.ar = w/h
         self.fbo = self.ctx.framebuffer(
@@ -193,11 +221,19 @@ class Window(arcade.Window):
         if arcade.key.D in self.keys:
             dv += Vec2(acc, 0.0)
         dp = self.player.pos-self.mouse_pos
-        self.player.angle = math.degrees(math.atan(dp.x/dp.y))
+        if dp.y:
+            self.player.angle = math.degrees(math.atan2(dp.x, dp.y))
+        else:
+            self.player.angle = 180
         self.player.update_vel(dv, acc*10)
         self.player.update(dt)
+        if self.shoot:
+            self.player.shoot()
+        p = self.player.pos
+        self.cam.position = [p.x, p.y]
 
     def on_draw(self):
+        self.cam.use()
         self.fbo.use()
         self.fbo.clear()
         self.clear()
@@ -207,6 +243,11 @@ class Window(arcade.Window):
     
     def on_mouse_motion(self, x, y, *args, **kargs):
         self.mouse_pos = Vec2(x, y)
+    
+    def on_mouse_press(self, *args):
+        self.shoot = True
+    def on_mouse_release(self, *args):
+        self.shoot = False
 
     def on_key_press(self, symbol: int, modifiers: int):
         if symbol == arcade.key.Q:
