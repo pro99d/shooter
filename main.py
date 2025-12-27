@@ -9,7 +9,8 @@ import math
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 SCREEN_TITLE = "Arcade shooter"
-
+enemies = []
+players = []
 
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -42,6 +43,8 @@ class Vec2:
         return f"Vec2(x= {self.x}, y= {self.y})"
     def __list__(self):
         return [self.x, self.y]
+
+player_pos = Vec2(0, 0)
 
 class Rect:
     def __init__(self, pos: Vec2, size: Vec2, ctx):
@@ -117,63 +120,86 @@ class Entity:
         return bool(self.rect.intersection(other.rect))
 
 class Bullet(Entity):
-    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, ctx):
+    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float, ctx):
         super().__init__(
             pos= pos,
             size= size,
-            color= (255, 255, 255),
+            color= (235, 235, 90),
             ctx= ctx
         )
-        # self.damage = damage
+        self.damage = damage
         self.angle = angle 
         angle = math.radians(-angle-90)
         self.velocity = Vec2(math.cos(angle)*vel, math.sin(angle)*vel)
         self.lifetime = 0
-        self.max_lfetime = 10
+        self.max_lfetime = lifetime
     
-    def update(self, dt, bul_list: list[Bullet]):
+    def update(self, dt, enemy: list):
         self.lifetime+=dt
         super().update(dt)
-        if self.lifetime > self.max_lfetime:
-            bul_list.remove(self)
+        for en in enemy:
+            if self.collide(en):
+                en.health -= self.damage
+                return True
+        return False
 
 
 class Player(Entity):
-    def __init__(self, pos: Vec2, size: Vec2, ctx):
+    def __init__(self, pos: Vec2, size: Vec2, enemies, ctx):
         super().__init__(
             pos= pos,
             size= size,
             color= (0, 255, 0),
             ctx= ctx
         )
+        self.enemies = enemies
         self.ctx = ctx
         self.mass = 1
         self.shoot_prop = {
             "bullets": 1,
             "spread": 15, # degrees
-            "reload": 0.5
+            "reload": 0.5,
+            "lifetime": 0.9
         }
         self.last_shot = 0
         self.bullets = []
         self.velocity: Vec2 = Vec2(0, 0)
-
+        self.health = 100
+        self.max_health = 100
+    
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
             s = self.shoot_prop["spread"]/2
+            lftime = self.shoot_prop["lifetime"]
             self.bullets.append(
-                Bullet(self.pos, Vec2(10, 20), 600, self.angle+random.uniform(-s, s), self.ctx)
+                Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), 10, lftime, self.ctx)
             )
             self.last_shot = time.time()
 
     def update(self, dt):
         self.velocity *= 0.95
+        remove = []
         super().update(dt)
         for bul in self.bullets:
-            bul.update(dt, self.bullets)
+            if bul.update(dt, self.enemies):
+                self.bullets.remove(bul)
+            if bul.lifetime>bul.max_lfetime:
+                self.bullets.remove(bul)
     def draw(self):
         super().draw()
         for bul in self.bullets:
             bul.draw()
+
+class Enemy(Player):
+    def __init__(self, pos: Vec2, ctx):
+        super().__init__(pos, Vec2(10, 10), players, ctx)
+        self.color = (70, 140, 0)
+    
+    def update(self, dt):
+        t = math.atan2(player_pos.x, player_pos.y)
+        self.angle = math.degrees(t)
+        self.velocity = Vec2(math.cos(t)*100, math.sin(t)*100)
+        self.shoot()
 
 class Window(arcade.Window):
     def __init__(self):
@@ -185,6 +211,7 @@ class Window(arcade.Window):
         self.player = Player(
             pos=Vec2(x=100, y=100),
             size=Vec2(50, 50),
+            enemies= enemies,
             ctx=self.ctx
         )
         self.fbo = self.ctx.framebuffer(
@@ -195,6 +222,7 @@ class Window(arcade.Window):
         self.shoot = False
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
+
     def on_resize(self, w, h):
         self.ar = w/h
         self.fbo = self.ctx.framebuffer(
@@ -209,8 +237,9 @@ class Window(arcade.Window):
 
         return size
     def on_update(self, dt: float):
+        global player_pos
         self.total_time += dt
-        acc = 100
+        acc = 90
         dv = Vec2(0, 0)
         if arcade.key.W in self.keys:
             dv += Vec2(0.0, acc)
@@ -230,16 +259,27 @@ class Window(arcade.Window):
         if self.shoot:
             self.player.shoot()
         p = self.player.pos
-        self.cam.position = [p.x, p.y]
+        # self.cam.position = [p.x, p.y]
+        if p.x < 0:
+            p.x = 0 
+        if p.x > self.width:
+            p.x = self.width
 
+        if p.y < 0:
+            p.y = 0 
+        if p.y > self.height:
+            p.y = self.height
+        player_pos = p
     def on_draw(self):
-        self.cam.use()
+        # self.cam.use()
         self.fbo.use()
         self.fbo.clear()
         self.clear()
         self.player.draw()
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
+        
+        arcade.draw_text(f"Health: {self.player.health}/{self.player.max_health}", 10, 10)
     
     def on_mouse_motion(self, x, y, *args, **kargs):
         self.mouse_pos = Vec2(x, y)
