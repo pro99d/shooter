@@ -11,6 +11,7 @@ SCREEN_HEIGHT = 600
 SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
+player_alive = True
 
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -158,7 +159,7 @@ class Player(Entity):
         self.shoot_prop = {
             "bullets": 1,
             "spread": 15, # degrees
-            "reload": 0.5,
+            "reload": 0.3,
             "lifetime": 0.9
         }
         self.last_shot = 0
@@ -183,7 +184,7 @@ class Player(Entity):
         for bul in self.bullets:
             if bul.update(dt, self.enemies):
                 self.bullets.remove(bul)
-            if bul.lifetime>bul.max_lfetime:
+            if bul.lifetime>bul.max_lfetime and bul in self.bullets:
                 self.bullets.remove(bul)
     def draw(self):
         super().draw()
@@ -192,15 +193,32 @@ class Player(Entity):
 
 class Enemy(Player):
     def __init__(self, pos: Vec2, ctx):
-        super().__init__(pos, Vec2(10, 10), players, ctx)
+        super().__init__(pos, Vec2(50, 50), players, ctx)
         self.color = (70, 140, 0)
     
+        self.shoot_prop = {
+            "bullets": 1,
+            "spread": 15, # degrees
+            "reload": 1.5,
+            "lifetime": 0.9
+        }
     def update(self, dt):
-        t = math.atan2(player_pos.x, player_pos.y)
-        self.angle = math.degrees(t)
-        self.velocity = Vec2(math.cos(t)*100, math.sin(t)*100)
+        dp = self.pos-player_pos
+        if dp.y:
+            self.angle = math.degrees(math.atan2(dp.x, dp.y))
+        else:
+            self.angle = 180
+        # t = math.atan2(player_pos.x, player_pos.y)
+        # self.angle = -math.degrees(t)+90
+        # self.velocity = Vec2(math.cos(t)*100, math.sin(t)*100)
         self.shoot()
-
+        if self.health <= 0:
+            enemies.remove(self)
+        for bul in self.bullets:
+            if bul.update(dt, self.enemies):
+                self.bullets.remove(bul)
+            if bul.lifetime>bul.max_lfetime and bul in self.bullets:
+                self.bullets.remove(bul)
 class Window(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -222,6 +240,9 @@ class Window(arcade.Window):
         self.shoot = False
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
+        self.last_enemy_spawn = 0
+        self.enemy_delay = 5
+        players.append(self.player)
 
     def on_resize(self, w, h):
         self.ar = w/h
@@ -270,12 +291,26 @@ class Window(arcade.Window):
         if p.y > self.height:
             p.y = self.height
         player_pos = p
+        if time.time() - self.last_enemy_spawn >= self.enemy_delay:
+            pos = Vec2(
+                random.randint(0, self.width),
+                random.randint(0, self.height)
+            )
+
+            enemies.append(
+                Enemy(pos, self.ctx)
+            )
+            self.last_enemy_spawn = time.time()
+        for enemy in enemies:
+            enemy.update(dt)
     def on_draw(self):
         # self.cam.use()
         self.fbo.use()
         self.fbo.clear()
         self.clear()
         self.player.draw()
+        for en in enemies:
+            en.draw()
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
