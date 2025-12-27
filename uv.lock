@@ -18,7 +18,7 @@ wheels = [
 ]
 
 [[package]]
-name = "arcade-shader-template"
+name = "arcade-shooter"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
