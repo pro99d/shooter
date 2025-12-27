@@ -7,7 +7,7 @@ from arcade.experimental.postprocessing import BloomEffect
 from base_classes import Vec2, Rect, Entity
 import math
 
-from arcade.gui import UIManager, UIFlatButton, UIAnchorLayout
+from arcade.gui import UIManager, UIFlatButton, UIGridLayout, UIAnchorLayout
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -158,13 +158,52 @@ class Window(arcade.Window):
         self.upgrade_cost = 1
         self.pause = False
 
-        self.card_picker_ui = UIManager()
-        anch = self.card_picker_ui.add(UIAnchorLayout())
-    
+        self.card_picker_ui: UIManager = UIManager()
+    def generate_upgrade_menu(self):
+        self.card_picker_ui.clear()
+        grid = UIGridLayout(
+                    column_count=1,
+                    row_count=3,
+                    size_hint=(0, 0),
+                    vertical_spacing=10,
+                    horizontal_spacing=10,
+                )
+        self.card_picker_ui.add(UIAnchorLayout(children=[grid]))
+        acts = [self.generate_upgrade() for _ in range(3)]
+        but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {(acts[0]['value']-1)*100}%", width= self.width, multiline= True)
+        but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {(acts[1]['value']-1)*100}%", width= self.width, multiline= True)
+        but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {(acts[2]['value']-1)*100}%", width= self.width, multiline= True)
+        pause = True
+        but1.place_text(anchor_x= "left")
+        but2.place_text(anchor_x= "left")
+        but3.place_text(anchor_x= "left")
+
+        grid.add(but1, collumn= 0, row=0)
+        grid.add(but2, collumn= 0, row=1)
+        grid.add(but3, collumn= 0, row=2)
+        
+        @but1.event("on_click")
+        def up1(*_):
+            self.player.shoot_prop[acts[0]["item"]]*=acts[0]['value']
+            self.card_picker_ui.clear()
+            self.pause = False
+
+        @but2.event("on_click")
+        def up2(*_):
+            self.player.shoot_prop[acts[1]["item"]]*=acts[1]['value']
+            self.card_picker_ui.clear()
+            self.pause = False
+        @but3.event("on_click")
+        def up3(*_):
+            self.player.shoot_prop[acts[2]["item"]]*=acts[2]['value']
+            self.card_picker_ui.clear()
+            self.pause = False
     def generate_upgrade(self):
         item = random.choice(["bullets", "delay", "spread", "damage"])
         if item != "spread":
-            value = random.uniform(1.05, 1.20)
+            value = 1.15#random.uniform(1.05, 1.20)
+        if item == "bullets":
+            value = 2
         else:
             value = random.uniform(0.9, 1.10)
         return {"value":value, "item": item}
@@ -203,6 +242,9 @@ class Window(arcade.Window):
     def on_update(self, dt: float):
         global player_alive
         global player_pos
+        if self.player.score >= self.upgrade_cost:
+            self.generate_upgrade_menu()
+            self.upgrade_cost *= 2
         if self.pause:
             return
         self.total_time += dt
@@ -251,6 +293,7 @@ class Window(arcade.Window):
         
         arcade.draw_text(f"Health: {self.player.health}/{self.player.max_health}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
+        self.card_picker_ui.draw()
     
     def on_mouse_motion(self, x, y, *args, **kargs):
         self.mouse_pos = Vec2(x, y)
