@@ -1,6 +1,7 @@
 import os
 import arcade
 import arcade.gl
+import time
 from arcade.experimental.postprocessing import BloomEffect
 import math
 
@@ -94,7 +95,7 @@ class Entity:
         self.pos = pos
         self.size = size
         self.angle = 0
-        self.rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
+        self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
         self.velocity = Vec2(0.0, 0.0)
         self.color = color
     
@@ -109,6 +110,20 @@ class Entity:
         nv = self.velocity + vel
         if math.sqrt(nv.x**2+nv.y**2) <= max_vel:
             self.velocity = nv
+    def collide(self, other: Entity):
+        return bool(self.rect.intersection(other.rect))
+
+class Bullet(Entity):
+    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, ctx):
+        super().__init__(
+            pos= pos,
+            size= size,
+            color= (255, 255, 255),
+            ctx= ctx
+        )
+        
+        self.angle = math.radians(angle)
+        self.velocity = Vec2(math.cos(self.angle)*vel, math.sin(self.angle)*vel)
 
 class Player(Entity):
     def __init__(self, pos: Vec2, size: Vec2, ctx):
@@ -119,6 +134,17 @@ class Player(Entity):
             ctx= ctx
         )
         self.mass = 1
+        self.shoot_prop = {
+            "bullets": 1,
+            "spread": 15, # degrees
+            "speed": 1 
+        }
+        self.last_shot = 0
+        self.bullets = []
+
+    def shoot(self):
+        if time.time()-self.last_shot >= self.shoot_prop["speed"]:
+            pass 
     
     def update(self, dt):
         self.velocity *= 0.95
