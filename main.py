@@ -67,7 +67,7 @@ class Player(Entity):
             "spread": 15, # degrees
             "reload": 0.5,
             "lifetime": 0.9,
-            "damage": 100
+            "damage": 10
         }
         self.last_shot = 0
         self.bullets = []
@@ -153,34 +153,35 @@ class Window(arcade.Window):
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
         self.last_enemy_spawn = 0
-        self.enemy_delay = 0.5
+        self.enemy_delay = 2
         players.append(self.player)
         self.upgrade_cost = 1
         self.pause = False
 
         self.card_picker_ui: UIManager = UIManager()
+        self.card_picker_ui.enable()
+
     def generate_upgrade_menu(self):
         self.card_picker_ui.clear()
-        grid = UIGridLayout(
-                    column_count=1,
-                    row_count=3,
-                    size_hint=(0, 0),
-                    vertical_spacing=10,
-                    horizontal_spacing=10,
-                )
-        self.card_picker_ui.add(UIAnchorLayout(children=[grid]))
-        acts = [self.generate_upgrade() for _ in range(3)]
-        but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {(acts[0]['value']-1)*100}%", width= self.width, multiline= True)
-        but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {(acts[1]['value']-1)*100}%", width= self.width, multiline= True)
-        but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {(acts[2]['value']-1)*100}%", width= self.width, multiline= True)
-        pause = True
-        but1.place_text(anchor_x= "left")
-        but2.place_text(anchor_x= "left")
-        but3.place_text(anchor_x= "left")
+        self.pause = True
+        anchor_layout = UIAnchorLayout()
+        self.card_picker_ui.add(anchor_layout)
 
-        grid.add(but1, collumn= 0, row=0)
-        grid.add(but2, collumn= 0, row=1)
-        grid.add(but3, collumn= 0, row=2)
+        acts = [self.generate_upgrade() for _ in range(3)]
+        button_width = self.width // 4  # 1/4 of screen width
+        but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {(acts[0]['value']-1)*100}%", width=button_width, height=50, multiline= True)
+        but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {(acts[1]['value']-1)*100}%", width=button_width, height=50, multiline= True)
+        but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {(acts[2]['value']-1)*100}%", width=button_width, height=50, multiline= True)
+
+        but1.place_text(anchor_x= "center", anchor_y="center")  # Center the text
+        but2.place_text(anchor_x= "center", anchor_y="center")
+        but3.place_text(anchor_x= "center", anchor_y="center")
+
+        # Add buttons to anchor layout with vertical spacing
+        # Position buttons with vertical spacing in the center
+        anchor_layout.add(but1, anchor_x="center", anchor_y="center", align_y=100)  # Top button
+        anchor_layout.add(but2, anchor_x="center", anchor_y="center")               # Middle button
+        anchor_layout.add(but3, anchor_x="center", anchor_y="center", align_y=-100) # Bottom button
         
         @but1.event("on_click")
         def up1(*_):
@@ -199,7 +200,7 @@ class Window(arcade.Window):
             self.card_picker_ui.clear()
             self.pause = False
     def generate_upgrade(self):
-        item = random.choice(["bullets", "delay", "spread", "damage"])
+        item = random.choice(["bullets", "reload", "spread", "damage"])
         if item != "spread":
             value = 1.15#random.uniform(1.05, 1.20)
         if item == "bullets":
