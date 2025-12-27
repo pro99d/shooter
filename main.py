@@ -4,7 +4,10 @@ import arcade
 import arcade.gl
 import time
 from arcade.experimental.postprocessing import BloomEffect
+from base_classes import Vec2, Rect, Entity
 import math
+
+from arcade.gui import UIManager, UIFlatButton, UIAnchorLayout
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -19,106 +22,9 @@ def normalize(pos: Vec2) -> Vec2:
     pos.x /= SCREEN_WIDTH/2
     pos.y /= SCREEN_HEIGHT/2
     return pos
-class Vec2:
-    def __init__(self, x: float, y: float) -> None:
-        self.x = x
-        self.y = y
-
-    def __add__(self, other):
-        if isinstance(other, Vec2):
-            return Vec2(self.x+other.x, self.y+other.y)
-        elif type(other) in [int, float]:
-            return Vec2(self.x+other, self.y+other)
-
-    def __sub__(self, other):
-        if isinstance(other, Vec2):
-            return Vec2(self.x-other.x, self.y-other.y)
-        elif type(other) in [int, float]:
-            return Vec2(self.x-other, self.y-other)
-    def __mul__(self, other):
-        if isinstance(other, Vec2):
-            return Vec2(self.x*other.x, self.y*other.y)
-        elif type(other) in [int, float]:
-            return Vec2(self.x*other, self.y*other)
-    def __repr__(self) -> str:
-        return f"Vec2(x= {self.x}, y= {self.y})"
-    def __list__(self):
-        return [self.x, self.y]
-
 player_pos = Vec2(0, 0)
 
-class Rect:
-    def __init__(self, pos: Vec2, size: Vec2, ctx):
-        self.pos = pos
-        self.ctx = ctx
-        self.size = size
-        self.frag = """
-            #version 330
-            out vec4 fragColor;
-            void main()
-            {
-                fragColor = vec4(1.0);
-            }
-        """
-        self.quad = arcade.gl.geometry.quad_2d(
-            size=(size.x, size.y), pos=(pos.x, pos.y))
-        self.update_program()
-        self.rotate(0)
 
-    def update_pos(self, pos: Vec2):
-        self.quad = arcade.gl.geometry.quad_2d(
-            size=(self.size.x, self.size.y), pos=(pos.x, pos.y))
-
-    def rotate(self, angle):
-        angle = math.radians(angle)
-        rotation_matrix = [
-            math.cos(angle), -math.sin(angle), 0, 0,
-            math.sin(angle), math.cos(angle), 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1
-        ]
-        # self.prog['rotation_matrix'] = rotation_matrix
-
-    def update_program(self):
-        self.prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_vert;
-            void main()
-            {
-                gl_Position = vec4(in_vert, 0., 1);
-            }
-
-            """,
-
-            fragment_shader=self.frag
-        )
-
-    def draw(self):
-        self.quad.render(self.prog)
-
-class Entity:
-    def __init__(self, pos: Vec2, size: Vec2, color: tuple[float, float, float], ctx):
-        self.pos = pos
-        self.size = size
-        self.angle = 0
-        self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
-        self.velocity: Vec2 = Vec2(0.0, 0.0)
-        self.color = color
-    
-    def draw(self):
-        arcade.draw_rect_filled(self.rect, self.color, self.angle)
-    
-    def update(self, dt: float):
-        self.pos += self.velocity*dt
-        self.rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
-
-    def update_vel(self, vel: Vec2, max_vel: float= 1.0):
-        nv = self.velocity + vel
-        if math.sqrt(nv.x**2+nv.y**2) <= max_vel:
-            self.velocity = nv
-    def collide(self, other: Entity):
-        return bool(self.rect.intersection(other.rect))
 
 class Bullet(Entity):
     def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float, ctx):
@@ -159,31 +65,34 @@ class Player(Entity):
         self.shoot_prop = {
             "bullets": 1,
             "spread": 15, # degrees
-            "reload": 0.3,
-            "lifetime": 0.9
+            "reload": 0.5,
+            "lifetime": 0.9,
+            "damage": 100
         }
         self.last_shot = 0
         self.bullets = []
         self.velocity: Vec2 = Vec2(0, 0)
         self.health = 100
         self.max_health = 100
+        self.score = 0
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
             s = self.shoot_prop["spread"]/2
             lftime = self.shoot_prop["lifetime"]
-            self.bullets.append(
-                Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), 10, lftime, self.ctx)
-            )
+            for _ in range(self.shoot_prop["bullets"]):
+                self.bullets.append(
+                    Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime, self.ctx)
+                )
             self.last_shot = time.time()
 
     def update(self, dt):
         self.velocity *= 0.95
-        remove = []
         super().update(dt)
         for bul in self.bullets:
             if bul.update(dt, self.enemies):
                 self.bullets.remove(bul)
+                # self.score += 1
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
                 self.bullets.remove(bul)
     def draw(self):
@@ -196,29 +105,32 @@ class Enemy(Player):
         super().__init__(pos, Vec2(50, 50), players, ctx)
         self.color = (70, 140, 0)
     
-        self.shoot_prop = {
-            "bullets": 1,
-            "spread": 15, # degrees
-            "reload": 1.5,
-            "lifetime": 0.9
-        }
+        self.shoot_prop["reload"] = 1.5
+        self.shoot_prop["bullets"] = 1
+        self.shoot_prop["spread"] = 15
+        self.shoot_prop["damage"] = 10
+
     def update(self, dt):
         dp = self.pos-player_pos
-        if dp.y:
-            self.angle = math.degrees(math.atan2(dp.x, dp.y))
-        else:
-            self.angle = 180
-        # t = math.atan2(player_pos.x, player_pos.y)
-        # self.angle = -math.degrees(t)+90
-        # self.velocity = Vec2(math.cos(t)*100, math.sin(t)*100)
-        self.shoot()
+        self.angle = math.degrees(math.atan2(dp.x, dp.y))
         if self.health <= 0:
             enemies.remove(self)
-        for bul in self.bullets:
-            if bul.update(dt, self.enemies):
-                self.bullets.remove(bul)
-            if bul.lifetime>bul.max_lfetime and bul in self.bullets:
-                self.bullets.remove(bul)
+            self.enemies[0].score += 1
+        r = -math.atan2(dp.x, dp.y)-math.radians(90)
+        self.update_vel(
+            Vec2(
+                math.cos(r)*100,
+                math.sin(r)*100,
+            ),
+            300
+        )
+
+        if player_alive:
+            self.shoot()
+        else:
+            self.velocity = Vec2(0, 0)
+        super().update(dt)
+            
 class Window(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -241,9 +153,22 @@ class Window(arcade.Window):
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
         self.last_enemy_spawn = 0
-        self.enemy_delay = 5
+        self.enemy_delay = 0.5
         players.append(self.player)
+        self.upgrade_cost = 1
+        self.pause = False
 
+        self.card_picker_ui = UIManager()
+        anch = self.card_picker_ui.add(UIAnchorLayout())
+    
+    def generate_upgrade(self):
+        item = random.choice(["bullets", "delay", "spread", "damage"])
+        if item != "spread":
+            value = random.uniform(1.05, 1.20)
+        else:
+            value = random.uniform(0.9, 1.10)
+        return {"value":value, "item": item}
+        
     def on_resize(self, w, h):
         self.ar = w/h
         self.fbo = self.ctx.framebuffer(
@@ -255,11 +180,9 @@ class Window(arcade.Window):
     def normalize_size(self, size: Vec2) -> Vec2:
         size.x /= self.width
         size.y /= self.height
-
         return size
-    def on_update(self, dt: float):
-        global player_pos
-        self.total_time += dt
+    
+    def player_move(self):
         acc = 90
         dv = Vec2(0, 0)
         if arcade.key.W in self.keys:
@@ -276,11 +199,21 @@ class Window(arcade.Window):
         else:
             self.player.angle = 180
         self.player.update_vel(dv, acc*10)
+
+    def on_update(self, dt: float):
+        global player_alive
+        global player_pos
+        if self.pause:
+            return
+        self.total_time += dt
+        if player_alive:
+            self.player_move()
+        
         self.player.update(dt)
-        if self.shoot:
+        if self.shoot and player_alive:
             self.player.shoot()
         p = self.player.pos
-        # self.cam.position = [p.x, p.y]
+        self.cam.position = [p.x, p.y]
         if p.x < 0:
             p.x = 0 
         if p.x > self.width:
@@ -291,7 +224,7 @@ class Window(arcade.Window):
         if p.y > self.height:
             p.y = self.height
         player_pos = p
-        if time.time() - self.last_enemy_spawn >= self.enemy_delay:
+        if time.time() - self.last_enemy_spawn >= self.enemy_delay and player_alive:
             pos = Vec2(
                 random.randint(0, self.width),
                 random.randint(0, self.height)
@@ -303,6 +236,8 @@ class Window(arcade.Window):
             self.last_enemy_spawn = time.time()
         for enemy in enemies:
             enemy.update(dt)
+        if self.player.health <= 0:
+            player_alive = False
     def on_draw(self):
         # self.cam.use()
         self.fbo.use()
@@ -315,6 +250,7 @@ class Window(arcade.Window):
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
         arcade.draw_text(f"Health: {self.player.health}/{self.player.max_health}", 10, 10)
+        arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
     
     def on_mouse_motion(self, x, y, *args, **kargs):
         self.mouse_pos = Vec2(x, y)
