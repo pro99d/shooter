@@ -4,6 +4,13 @@ import arcade.gl
 
 sprite_all_draw = arcade.SpriteList()
 
+class SoundPlayer:
+    def __init__(self):
+        self.select = arcade.load_sound("./assets/sounds/JDSherbert/select.wav")
+        self.shot = arcade.load_sound("./assets/sounds/JDSherbert/shot.wav")
+        self.explode = arcade.load_sound("./assets/sounds/JDSherbert/explode.wav")
+        self.dash = arcade.load_sound("./assets/sounds/JDSherbert/dash.wav")
+
 class Vec2:
     def __init__(self, x: float, y: float) -> None:
         self.x = x
@@ -83,6 +90,7 @@ class Entity:
         sprite_all_draw.append(self.rect)
         self.velocity: Vec2 = Vec2(0.0, 0.0)
         self.color = color
+        self.sounds = SoundPlayer()
     # def draw(self):
         # arcade.draw_rect_filled(self.rect, self.color, self.angle)
     
@@ -94,7 +102,8 @@ class Entity:
         self.rect.angle = self.angle
     
     def die(self):
-        sprite_all_draw.remove(self.rect)
+        if self.rect in sprite_all_draw:
+            sprite_all_draw.remove(self.rect)
 
     def update_vel(self, vel: Vec2, max_vel: float= 1.0):
         nv = self.velocity + vel

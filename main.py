@@ -1,13 +1,15 @@
+import math
 import os
 import random
-import arcade
-import arcade.gl
+import sys
 import time
-from arcade.experimental.postprocessing import BloomEffect
-from base_classes import Vec2, Rect, Entity, sprite_all_draw, Bar
-import math
 
-from arcade.gui import UIManager, UIFlatButton, UIGridLayout, UIAnchorLayout
+import arcade
+from arcade.experimental.postprocessing import BloomEffect
+import arcade.gl
+from arcade.gui import UIAnchorLayout, UIFlatButton, UIGridLayout, UIManager
+
+from base_classes import Bar, Entity, Rect, Vec2, sprite_all_draw
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
@@ -95,10 +97,11 @@ class Player(Entity):
         self.last_dash = 0
 
     def dash(self):
-        if self.stamina >= self.stamina_max:
+        if self.stamina >= 1:
             self.velocity *= 5
-            self.stamina = 0
+            self.stamina -= 1
             self.last_dash = time.time()
+            self.sounds.dash.play()
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
@@ -108,6 +111,7 @@ class Player(Entity):
                 self.bullets.append(
                     Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime, self.ctx)
                 )
+            self.sounds.shot.play()
             self.last_shot = time.time()
 
     def update(self, dt):
@@ -115,7 +119,7 @@ class Player(Entity):
         super().update(dt)
         self.rect.color = (255-255*(max(min(self.health/self.max_health, 1), 0)), 255*(max(min(self.health/self.max_health, 1), 0)), 0)
         if self.health < self.max_health:
-            self.health += self.max_health/30*dt
+            self.health += self.max_health/10*dt
         else:
             self.health = self.max_health
         ns = self.stamina + dt
@@ -123,10 +127,13 @@ class Player(Entity):
             self.stamina = self.stamina_max
         else:
             self.stamina = ns
+        s = False
         for bul in self.bullets:
             if bul.update(dt, self.enemies):
                 bul.die()
-                self.bullets.remove(bul)
+                if bul in self.bullets:
+                    self.bullets.remove(bul)
+                s = True
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
                 bul.die()
                 self.bullets.remove(bul)
@@ -134,7 +141,8 @@ class Player(Entity):
             self.inv = True
         else:
             self.inv = False
-
+        if s:
+            self.sounds.explode.play()
     # def draw(self):
         # super().draw()
         # for bul in self.bullets:
@@ -188,6 +196,40 @@ class Enemy(Player):
             players[-1].score += 1
             enemy_hp = 5*(players[-1].score+2)
             
+class Syncer:
+    def __init__(self, wind: Window):
+        global players, enemies
+        self.wind = wind
+        self.multiplayer = "--multiplayer" in sys.argv
+        if self.multiplayer:
+            self.ip = input("enter ip (localhost): ")
+            if not self.ip:
+                self.ip = "localhost"
+            self.port = int(input("enter port (8080): "))
+            if not self.port:
+                self.port = 8080
+            while True:
+                self.ser = input("server/client (server): ")
+                if not self.ser:
+                    self.ser = "server"
+                if self.ser.lower() == "server":
+                    self.ser = True
+                    break
+                elif self.ser.lower() == "client":
+                    self.ser = False
+                    break
+                else:
+                    print("please, enter client or server")
+        self.pause = False
+        self.players = players.copy()
+            
+    def sync(self):
+        if not self.multiplayer:
+            return
+        else:
+            print("multiplayer is WIP, skip sync")
+        
+
 class Window(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -277,6 +319,7 @@ class Window(arcade.Window):
             self.pause = False
             en_up = self.generate_upgrade()
             enemy_shot[en_up['item']] *= en_up['value']
+            self.player.sounds.select.play()
 
         @but2.event("on_click")
         def up2(*_):
@@ -285,6 +328,7 @@ class Window(arcade.Window):
             self.pause = False
             en_up = self.generate_upgrade()
             enemy_shot[en_up['item']] *= en_up['value']
+            self.player.sounds.select.play()
 
         @but3.event("on_click")
         def up3(*_):
@@ -293,6 +337,7 @@ class Window(arcade.Window):
             self.pause = False
             en_up = self.generate_upgrade()
             enemy_shot[en_up['item']] *= en_up['value']
+            self.player.sounds.select.play()
 
     def generate_upgrade(self):
         item = random.choice(["bullets", "reload", "scatter", "damage"])
@@ -341,11 +386,9 @@ class Window(arcade.Window):
         global player_pos
         if player_alive:
             self.player_move()
-
-
-        self.player.update(dt)
-        if self.shoot and player_alive:
-            self.player.shoot()
+            self.player.update(dt)
+            if self.shoot:
+                self.player.shoot()
         p = self.player.pos
         self.cam.position = [p.x, p.y]
         if p.x < 0:
