@@ -16,6 +16,12 @@ enemies = []
 players = []
 player_alive = True
 enemy_hp = 10
+enemy_shot = {
+    "bullets": 2,
+    "reload": 1,
+    "damage": 10,
+    "spread": 15,
+}
 
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -105,13 +111,11 @@ class Player(Entity):
 
 class Enemy(Player):
     def __init__(self, pos: Vec2, ctx):
+        global enemy_shot
         super().__init__(pos, Vec2(50, 50), players, ctx)
         self.color = (70, 140, 0)
         self.health = enemy_hp 
-        self.shoot_prop["reload"] = 1.5
-        self.shoot_prop["bullets"] = 1
-        self.shoot_prop["spread"] = 15
-        self.shoot_prop["damage"] = 10
+        self.shoot_prop.update(enemy_shot)
 
     def update(self, dt):
         global enemy_hp
@@ -139,7 +143,7 @@ class Enemy(Player):
 class Window(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
-                         SCREEN_TITLE, resizable=True, gl_version=(4, 3))
+                         SCREEN_TITLE, resizable=True, gl_version=(4, 3), fullscreen= True)
         self.ar = self.width/self.height
         self.total_time = 0.0
         self.bloom = BloomEffect(size=(self.width, self.height))
@@ -161,10 +165,11 @@ class Window(arcade.Window):
         self.enemy_delay = 2
         players.append(self.player)
         self.upgrade_cost = 1
-        self.pause = False
+        self.pause = True
 
         self.card_picker_ui: UIManager = UIManager()
         self.card_picker_ui.enable()
+        self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4)
 
         self.inv_t = 0
 
@@ -193,17 +198,25 @@ class Window(arcade.Window):
             self.player.shoot_prop[acts[0]["item"]]*=acts[0]['value']
             self.card_picker_ui.clear()
             self.pause = False
+            en_up = self.generate_upgrade()
+            enemy_shot[en_up['item']] *= en_up['value']
 
         @but2.event("on_click")
         def up2(*_):
             self.player.shoot_prop[acts[1]["item"]]*=acts[1]['value']
             self.card_picker_ui.clear()
             self.pause = False
+            en_up = self.generate_upgrade()
+            enemy_shot[en_up['item']] *= en_up['value']
+
         @but3.event("on_click")
         def up3(*_):
             self.player.shoot_prop[acts[2]["item"]]*=acts[2]['value']
             self.card_picker_ui.clear()
             self.pause = False
+            en_up = self.generate_upgrade()
+            enemy_shot[en_up['item']] *= en_up['value']
+
     def generate_upgrade(self):
         item = random.choice(["bullets", "reload", "spread", "damage"])
         if item == "bullets":
@@ -246,27 +259,16 @@ class Window(arcade.Window):
         else:
             self.player.angle = 180
         self.player.update_vel(dv, acc*10)
-
-    def on_update(self, dt: float):
+    def update_player(self, dt):
         global player_alive
         global player_pos
-        if self.player.score != 0:
-            self.enemy_delay = 1/math.sqrt(self.total_time/60)
-        if self.player.score >= self.upgrade_cost:
-            self.generate_upgrade_menu()
-            self.upgrade_cost *= 2
-        if self.pause:
-            return
-        if time.time() - self.inv_t >= 0.1:
-            self.player.inv = False
-        self.total_time += dt
         if player_alive:
             self.player_move()
-        
             if self.player.health < self.player.max_health:
                 self.player.health += self.player.max_health/30*dt
             else:
                 self.player.health = self.player.max_health
+
         self.player.update(dt)
         if self.shoot and player_alive:
             self.player.shoot()
@@ -282,6 +284,10 @@ class Window(arcade.Window):
         if p.y > self.height:
             p.y = self.height
         player_pos = p
+        if self.player.health <= 0:
+            player_alive = False
+
+    def update_enemy(self, dt):
         if time.time() - self.last_enemy_spawn >= self.enemy_delay and player_alive:
             pos = Vec2(
                 random.randint(0, self.width),
@@ -294,8 +300,24 @@ class Window(arcade.Window):
             self.last_enemy_spawn = time.time()
         for enemy in enemies:
             enemy.update(dt)
-        if self.player.health <= 0:
-            player_alive = False
+
+    def on_update(self, dt: float):
+        global player_alive
+        global player_pos
+        if self.player.score != 0:
+            self.enemy_delay = 1/math.sqrt(self.total_time/30)
+        if self.player.score >= self.upgrade_cost:
+            self.generate_upgrade_menu()
+            self.upgrade_cost = 1.5*self.player.score
+        if self.pause:
+            return
+        if time.time() - self.inv_t >= 0.4:
+            self.player.inv = False
+        
+        self.update_player(dt)
+        self.update_enemy(dt)
+
+        self.total_time += dt
     def on_draw(self):
         # self.cam.use()
         self.fbo.use()
@@ -314,6 +336,8 @@ class Window(arcade.Window):
         arcade.draw_text(f"Bullet count: {self.player.shoot_prop['bullets']}", 10, self.height-60)
         arcade.draw_text(f"Damage: {self.player.shoot_prop['damage']}", 10, self.height-75)
         arcade.draw_text(f"Reload: {self.player.shoot_prop['reload']}", 10, self.height-90)
+        if self.pause:
+            self.pause_text.draw()
         self.card_picker_ui.draw()
     
     def on_mouse_motion(self, x, y, *args, **kargs):
@@ -331,8 +355,9 @@ class Window(arcade.Window):
             self.inv_t = time.time()
         if symbol == arcade.key.Q:
             arcade.close_window()
-        else:
-            self.keys.add(symbol)
+        elif symbol == arcade.key.P:
+            self.pause = not self.pause
+        self.keys.add(symbol)
     def on_key_release(self, symbol, *args):
         self.keys.remove(symbol)
 
