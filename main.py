@@ -15,6 +15,7 @@ SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
 player_alive = True
+enemy_hp = 10
 
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -46,7 +47,8 @@ class Bullet(Entity):
         super().update(dt)
         for en in enemy:
             if self.collide(en):
-                en.health -= self.damage
+                if not en.inv:
+                    en.health -= self.damage
                 return True
         return False
 
@@ -75,6 +77,7 @@ class Player(Entity):
         self.health = 100
         self.max_health = 100
         self.score = 0
+        self.inv = False
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
@@ -104,18 +107,20 @@ class Enemy(Player):
     def __init__(self, pos: Vec2, ctx):
         super().__init__(pos, Vec2(50, 50), players, ctx)
         self.color = (70, 140, 0)
-    
+        self.health = enemy_hp 
         self.shoot_prop["reload"] = 1.5
         self.shoot_prop["bullets"] = 1
         self.shoot_prop["spread"] = 15
         self.shoot_prop["damage"] = 10
 
     def update(self, dt):
+        global enemy_hp
         dp = self.pos-player_pos
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
         if self.health <= 0:
             enemies.remove(self)
             self.enemies[0].score += 1
+            enemy_hp = 10*math.sqrt(players[0].score)
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
             Vec2(
@@ -161,6 +166,8 @@ class Window(arcade.Window):
         self.card_picker_ui: UIManager = UIManager()
         self.card_picker_ui.enable()
 
+        self.inv_t = 0
+
     def generate_upgrade_menu(self):
         self.card_picker_ui.clear()
         self.pause = True
@@ -173,15 +180,13 @@ class Window(arcade.Window):
         but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {(acts[1]['value']-1)*100}%", width=button_width, height=50, multiline= True)
         but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {(acts[2]['value']-1)*100}%", width=button_width, height=50, multiline= True)
 
-        but1.place_text(anchor_x= "center", anchor_y="center")  # Center the text
+        but1.place_text(anchor_x= "center", anchor_y="center")
         but2.place_text(anchor_x= "center", anchor_y="center")
         but3.place_text(anchor_x= "center", anchor_y="center")
 
-        # Add buttons to anchor layout with vertical spacing
-        # Position buttons with vertical spacing in the center
-        anchor_layout.add(but1, anchor_x="center", anchor_y="center", align_y=100)  # Top button
-        anchor_layout.add(but2, anchor_x="center", anchor_y="center")               # Middle button
-        anchor_layout.add(but3, anchor_x="center", anchor_y="center", align_y=-100) # Bottom button
+        anchor_layout.add(but1, anchor_x="center", anchor_y="center", align_y=100)
+        anchor_layout.add(but2, anchor_x="center", anchor_y="center")
+        anchor_layout.add(but3, anchor_x="center", anchor_y="center", align_y=-100)
         
         @but1.event("on_click")
         def up1(*_):
@@ -201,12 +206,14 @@ class Window(arcade.Window):
             self.pause = False
     def generate_upgrade(self):
         item = random.choice(["bullets", "reload", "spread", "damage"])
-        if item != "spread":
-            value = 1.15#random.uniform(1.05, 1.20)
         if item == "bullets":
             value = 2
-        else:
-            value = random.uniform(0.9, 1.10)
+        elif item == "reload":
+            value = 0.75
+        elif item == "spread":
+            value = random.uniform(0.75, 1.25)
+        elif item == "damage":
+            value = 1.25
         return {"value":value, "item": item}
         
     def on_resize(self, w, h):
@@ -243,15 +250,23 @@ class Window(arcade.Window):
     def on_update(self, dt: float):
         global player_alive
         global player_pos
+        if self.player.score != 0:
+            self.enemy_delay = 1/math.sqrt(self.total_time/60)
         if self.player.score >= self.upgrade_cost:
             self.generate_upgrade_menu()
             self.upgrade_cost *= 2
         if self.pause:
             return
+        if time.time() - self.inv_t >= 0.1:
+            self.player.inv = False
         self.total_time += dt
         if player_alive:
             self.player_move()
         
+            if self.player.health < self.player.max_health:
+                self.player.health += self.player.max_health/30*dt
+            else:
+                self.player.health = self.player.max_health
         self.player.update(dt)
         if self.shoot and player_alive:
             self.player.shoot()
@@ -292,8 +307,13 @@ class Window(arcade.Window):
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
-        arcade.draw_text(f"Health: {self.player.health}/{self.player.max_health}", 10, 10)
+        arcade.draw_text(f"Health: {round(self.player.health)}/{self.player.max_health}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
+        arcade.draw_text(f"Upgrade cost: {self.upgrade_cost}", 10, self.height-30)
+        arcade.draw_text(f"Spread: {self.player.shoot_prop['spread']}", 10, self.height-45)
+        arcade.draw_text(f"Bullet count: {self.player.shoot_prop['bullets']}", 10, self.height-60)
+        arcade.draw_text(f"Damage: {self.player.shoot_prop['damage']}", 10, self.height-75)
+        arcade.draw_text(f"Reload: {self.player.shoot_prop['reload']}", 10, self.height-90)
         self.card_picker_ui.draw()
     
     def on_mouse_motion(self, x, y, *args, **kargs):
@@ -305,6 +325,10 @@ class Window(arcade.Window):
         self.shoot = False
 
     def on_key_press(self, symbol: int, modifiers: int):
+        if symbol == arcade.key.SPACE:
+            self.player.velocity*=5
+            self.player.inv = True
+            self.inv_t = time.time()
         if symbol == arcade.key.Q:
             arcade.close_window()
         else:
