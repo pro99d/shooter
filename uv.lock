@@ -23,12 +23,14 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "arcade" },
+    { name = "server-sync" },
     { name = "snakeviz" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "arcade", specifier = ">=3.3.3" },
+    { name = "server-sync", git = "https://github.com/pro99d/server-sync" },
     { name = "snakeviz", specifier = ">=2.2.2" },
 ]
 
@@ -143,6 +145,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/79/62/0d8a2220ee0747522
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/f7/6b6c51b50ed8681a31146e5e7ac325b78fe776ff48b1ec8f56d7e4995d72/pytiled_parser-2.2.9-py2.py3-none-any.whl", hash = "sha256:37f73d31950bf4d02ee3bda59f3d6123c55194dc8d8e876821dd2080af5f1f91", size = 44452, upload-time = "2025-01-23T18:43:28.207Z" },
 ]
+
+[[package]]
+name = "server-sync"
+version = "0.1.0"
+source = { git = "https://github.com/pro99d/server-sync#164c29f73483855b777641e98786cf80fe55d00e" }
 
 [[package]]
 name = "snakeviz"
