@@ -83,6 +83,7 @@ class Player(Entity):
         self.health = 100
         self.max_health = 100
         self.score = 0
+        self.level = 1
         self.inv = False
     
     def shoot(self):
@@ -101,9 +102,10 @@ class Player(Entity):
         for bul in self.bullets:
             if bul.update(dt, self.enemies):
                 self.bullets.remove(bul)
-                # self.score += 1
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
                 self.bullets.remove(bul)
+        self.max_health = 100*(self.level**2/10+1)
+
     def draw(self):
         super().draw()
         for bul in self.bullets:
@@ -164,16 +166,17 @@ class Window(arcade.Window):
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
         self.last_enemy_spawn = 0
-        self.enemy_delay = 2
         players.append(self.player)
 
         self.card_picker_ui: UIManager = UIManager()
         self.card_picker_ui.enable()
         self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4,font_size= 20)
+        self.restart_text = arcade.Text("Press R to restart.", self.width/2, self.height*2/4,font_size= 20)
 
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp
         enemy_hp = 10
+        self.enemy_delay = 2
         player_alive = True
         self.player = Player(
             pos=Vec2(x=self.width/2, y=self.height/2),
@@ -203,9 +206,9 @@ class Window(arcade.Window):
 
         acts = [self.generate_upgrade() for _ in range(3)]
         button_width = self.width // 4  # 1/4 of screen width
-        but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {(acts[0]['value']-1)*100}%", width=button_width, height=50, multiline= True)
-        but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {(acts[1]['value']-1)*100}%", width=button_width, height=50, multiline= True)
-        but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {(acts[2]['value']-1)*100}%", width=button_width, height=50, multiline= True)
+        but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {round((acts[0]['value']-1)*100, 2)}%", width=button_width, height=50, multiline= True)
+        but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {round((acts[1]['value']-1)*100, 2)}%", width=button_width, height=50, multiline= True)
+        but3 = UIFlatButton(text= f"improve {acts[2]['item']}\n by {round((acts[2]['value']-1)*100, 2)}%", width=button_width, height=50, multiline= True)
 
         but1.place_text(anchor_x= "center", anchor_y="center")
         but2.place_text(anchor_x= "center", anchor_y="center")
@@ -286,6 +289,7 @@ class Window(arcade.Window):
         global player_pos
         if player_alive:
             self.player_move()
+
             if self.player.health < self.player.max_health:
                 self.player.health += self.player.max_health/30*dt
             else:
@@ -337,6 +341,7 @@ class Window(arcade.Window):
         if self.player.score >= self.upgrade_cost:
             self.generate_upgrade_menu()
             self.upgrade_cost = 1.5*self.player.score
+            self.player.level += 1
         if self.pause:
             return
         if time.time() - self.inv_t >= 0.4:
@@ -347,6 +352,7 @@ class Window(arcade.Window):
 
         self.total_time += dt
     def on_draw(self):
+        global player_alive
         # self.cam.use()
         self.fbo.use()
         self.fbo.clear()
@@ -358,15 +364,17 @@ class Window(arcade.Window):
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
-        arcade.draw_text(f"Health: {round(self.player.health)}/{self.player.max_health}", 10, 10)
+        arcade.draw_text(f"Health: {round(self.player.health)}/{round(self.player.max_health)}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
-        arcade.draw_text(f"Upgrade cost: {self.upgrade_cost}", 10, self.height-30)
+        arcade.draw_text(f"Upgrade cost: {round(self.upgrade_cost)}", 10, self.height-30)
         arcade.draw_text(f"Scatter: {self.player.shoot_prop['scatter']}", 10, self.height-45)
         arcade.draw_text(f"Bullet count: {self.player.shoot_prop['bullets']}", 10, self.height-60)
         arcade.draw_text(f"Damage: {self.player.shoot_prop['damage']}", 10, self.height-75)
         arcade.draw_text(f"Reload: {self.player.shoot_prop['reload']}", 10, self.height-90)
         if self.pause:
             self.pause_text.draw()
+        if not player_alive:
+            self.restart_text.draw()
         self.card_picker_ui.draw()
     
     def on_mouse_motion(self, x, y, *args, **kargs):
@@ -391,7 +399,8 @@ class Window(arcade.Window):
             self.pause = not self.pause
         self.keys.add(symbol)
     def on_key_release(self, symbol, *args):
-        self.keys.remove(symbol)
+        if symbol in self.keys:
+            self.keys.remove(symbol)
 
 
 def main():
