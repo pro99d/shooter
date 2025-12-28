@@ -113,6 +113,11 @@ class Player(Entity):
     def update(self, dt):
         self.velocity *= 0.95
         super().update(dt)
+        self.rect.color = (255-255*(max(min(self.health/self.max_health, 1), 0)), 255*(max(min(self.health/self.max_health, 1), 0)), 0)
+        if self.health < self.max_health:
+            self.health += self.max_health/30*dt
+        else:
+            self.health = self.max_health
         ns = self.stamina + dt
         if ns > self.stamina_max:
             self.stamina = self.stamina_max
@@ -125,7 +130,6 @@ class Player(Entity):
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
                 bul.die()
                 self.bullets.remove(bul)
-        self.max_health = 100*(self.level**2/10+1)
         if time.time()- self.last_dash <= 0.3:
             self.inv = True
         else:
@@ -142,6 +146,7 @@ class Enemy(Player):
         super().__init__(pos, Vec2(50, 50), players, ctx)
         self.rect.color = (50, 130, 0)
         self.health = enemy_hp 
+        self.max_health = enemy_hp
         self.shoot_prop.update(enemy_shot)
     def calculate_new_pos(self, bul_speed, pos, e_speed):
         dist = math.dist([self.pos.x, self.pos.y], [player_pos.x, player_pos.y])
@@ -174,6 +179,7 @@ class Enemy(Player):
         else:
             self.velocity = Vec2(0, 0)
         super().update(dt)
+        self.max_health = enemy_hp
         if self.health <= 0:
             for bul in self.bullets:
                 bul.die()
@@ -212,10 +218,10 @@ class Window(arcade.Window):
         self.card_picker_ui.enable()
         self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4,font_size= 20)
         self.restart_text = arcade.Text("Press R to restart.", self.width/2, self.height*2/4,font_size= 20)
-        size = Vec2(400, 10)
-        size.x /= self.width
-        size.y /= self.height
-        self.stamina_bar = Bar(Vec2(0, -0.8), size, (0, 240, 240), (10, 10, 10), 3, 3, self.ctx)
+        size = Vec2(400, 15)
+        self.stamina_bar = Bar(Vec2(0, 20), size, (0, 200, 200), (30, 30, 30), 3, 3)
+        self.health_bar = Bar(Vec2(0, 40), size, (200, 0, 0), (30, 30, 30), self.player.health, self.player.max_health)
+
 
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw
@@ -336,10 +342,6 @@ class Window(arcade.Window):
         if player_alive:
             self.player_move()
 
-            if self.player.health < self.player.max_health:
-                self.player.health += self.player.max_health/30*dt
-            else:
-                self.player.health = self.player.max_health
 
         self.player.update(dt)
         if self.shoot and player_alive:
@@ -365,6 +367,7 @@ class Window(arcade.Window):
         if self.player.health <= 0:
             player_alive = False
 
+        self.player.max_health = 100*(self.player.level**2/10+1)
     def update_enemy(self, dt):
         if time.time() - self.last_enemy_spawn >= self.enemy_delay and player_alive:
             pos = Vec2(
@@ -406,10 +409,14 @@ class Window(arcade.Window):
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
+
+        self.health_bar.value = self.player.health
+        self.health_bar.max_value = self.player.max_health
+        self.health_bar.draw()
         self.stamina_bar.value = self.player.stamina
         self.stamina_bar.draw()
 
-        arcade.draw_text(f"Health: {round(self.player.health)}/{round(self.player.max_health)}", 10, 10)
+        # arcade.draw_text(f"Health: {round(self.player.health)}/{round(self.player.max_health)}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
         arcade.draw_text(f"Upgrade cost: {round(self.upgrade_cost)}", 10, self.height-30)
         arcade.draw_text(f"Scatter: {self.player.shoot_prop['scatter']}", 10, self.height-45)

@@ -104,56 +104,20 @@ class Entity:
         return bool(self.rect.rect.intersection(other.rect.rect))
 
 class Bar:
-    def __init__(self, pos: Vec2, size: Vec2, color, bg_color, value, max_value, ctx):
+    def __init__(self, pos: Vec2, size: Vec2, color, bg_color, value, max_value):
         self.pos = pos
         self.size = size
         self.color = color
         self.bg_color = bg_color
         self.value = value
         self.max_value = max_value
-        self.background_rect = Rect(self.pos, self.size, ctx)
-        self.front_rect = Rect(self.pos, self.size, ctx)
         self.text_pos = Vec2(
-            (pos.x+size.x+1)/2*1920,
-            (pos.y+1)/2*1080,
+            pos.x + size.x/2,
+            pos.y,
         )
-        bg_sh = """
-            #version 330
-            out vec4 fragColor;
-            uniform vec3 color;
-            void main()
-            {
-                vec3 col = color / 255.0;
-                fragColor = vec4(col, 1.0);
-            }
-        """
-
-        fr_sh = """
-            #version 330
-            out vec4 fragColor;
-            uniform vec3 color;
-            uniform float progress;
-            void main()
-            {
-                vec3 col = color / 255.0;
-                float p = progress * 2.0 - 1.0;
-                float alpha = 0.0;
-                if (fragColor.x <= p){
-                    alpha = 1.0;
-                } else{
-                    alpha = 0.0;
-                }
-                fragColor = vec4(col, alpha);
-            }
-        """
-        self.background_rect.frag = bg_sh
-        self.front_rect.frag = fr_sh
-        self.background_rect.update_program()
-        self.front_rect.update_program()
 
     def draw(self):
-        self.background_rect['color'] = self.bg_color
-        self.background_rect.draw()
-        self.front_rect.draw()
-        arcade.draw_text(f"{self.value}/{self.max_value}", self.text_pos.x, self.text_pos.y)
+        arcade.draw_lbwh_rectangle_filled(self.pos.x, self.pos.y, self.size.x, self.size.y, self.bg_color)
+        arcade.draw_lbwh_rectangle_filled(self.pos.x, self.pos.y, self.size.x*self.value/self.max_value, self.size.y, self.color)
+        arcade.draw_text(f"{round(self.value, 2)}/{round(self.max_value, 2)}", self.text_pos.x, self.text_pos.y)
 
