@@ -4,7 +4,7 @@ import arcade
 import arcade.gl
 import time
 from arcade.experimental.postprocessing import BloomEffect
-from base_classes import Vec2, Rect, Entity, sprite_all_draw
+from base_classes import Vec2, Rect, Entity, sprite_all_draw, Bar
 import math
 
 from arcade.gui import UIManager, UIFlatButton, UIGridLayout, UIAnchorLayout
@@ -98,6 +98,7 @@ class Player(Entity):
         if self.stamina >= self.stamina_max:
             self.velocity *= 5
             self.stamina = 0
+            self.last_dash = time.time()
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
@@ -198,7 +199,7 @@ class Window(arcade.Window):
             color_attachments=[self.ctx.texture((self.width, self.height))]
         )
         self.setup()
-
+        
         self.keys = set()
         self.mouse_pos = Vec2(0, 0)
         self.shoot = False
@@ -211,6 +212,10 @@ class Window(arcade.Window):
         self.card_picker_ui.enable()
         self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4,font_size= 20)
         self.restart_text = arcade.Text("Press R to restart.", self.width/2, self.height*2/4,font_size= 20)
+        size = Vec2(400, 10)
+        size.x /= self.width
+        size.y /= self.height
+        self.stamina_bar = Bar(Vec2(0, -0.8), size, (0, 240, 240), (10, 10, 10), 3, 3, self.ctx)
 
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw
@@ -401,6 +406,9 @@ class Window(arcade.Window):
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
+        self.stamina_bar.value = self.player.stamina
+        self.stamina_bar.draw()
+
         arcade.draw_text(f"Health: {round(self.player.health)}/{round(self.player.max_health)}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
         arcade.draw_text(f"Upgrade cost: {round(self.upgrade_cost)}", 10, self.height-30)

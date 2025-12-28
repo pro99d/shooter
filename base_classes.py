@@ -46,20 +46,13 @@ class Rect:
         self.quad = arcade.gl.geometry.quad_2d(
             size=(size.x, size.y), pos=(pos.x, pos.y))
         self.update_program()
-        self.rotate(0)
+    def __setitem__(self, key, val):
+        self.prog[key] = val
 
     def update_pos(self, pos: Vec2):
         self.quad = arcade.gl.geometry.quad_2d(
             size=(self.size.x, self.size.y), pos=(pos.x, pos.y))
 
-    def rotate(self, angle):
-        angle = math.radians(angle)
-        rotation_matrix = [
-            math.cos(angle), -math.sin(angle), 0, 0,
-            math.sin(angle), math.cos(angle), 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1
-        ]
         # self.prog['rotation_matrix'] = rotation_matrix
 
     def update_program(self):
@@ -111,5 +104,56 @@ class Entity:
         return bool(self.rect.rect.intersection(other.rect.rect))
 
 class Bar:
-    def __init__(self, pos: Vec2, size: Vec2, color, value, max_value):
-        pass
+    def __init__(self, pos: Vec2, size: Vec2, color, bg_color, value, max_value, ctx):
+        self.pos = pos
+        self.size = size
+        self.color = color
+        self.bg_color = bg_color
+        self.value = value
+        self.max_value = max_value
+        self.background_rect = Rect(self.pos, self.size, ctx)
+        self.front_rect = Rect(self.pos, self.size, ctx)
+        self.text_pos = Vec2(
+            (pos.x+size.x+1)/2*1920,
+            (pos.y+1)/2*1080,
+        )
+        bg_sh = """
+            #version 330
+            out vec4 fragColor;
+            uniform vec3 color;
+            void main()
+            {
+                vec3 col = color / 255.0;
+                fragColor = vec4(col, 1.0);
+            }
+        """
+
+        fr_sh = """
+            #version 330
+            out vec4 fragColor;
+            uniform vec3 color;
+            uniform float progress;
+            void main()
+            {
+                vec3 col = color / 255.0;
+                float p = progress * 2.0 - 1.0;
+                float alpha = 0.0;
+                if (fragColor.x <= p){
+                    alpha = 1.0;
+                } else{
+                    alpha = 0.0;
+                }
+                fragColor = vec4(col, alpha);
+            }
+        """
+        self.background_rect.frag = bg_sh
+        self.front_rect.frag = fr_sh
+        self.background_rect.update_program()
+        self.front_rect.update_program()
+
+    def draw(self):
+        self.background_rect['color'] = self.bg_color
+        self.background_rect.draw()
+        self.front_rect.draw()
+        arcade.draw_text(f"{self.value}/{self.max_value}", self.text_pos.x, self.text_pos.y)
+
