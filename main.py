@@ -243,7 +243,6 @@ class Window(arcade.Window):
     def on_update(self, dt: float):
         global player_alive
         global player_pos
-
         if self.player.score >= self.upgrade_cost:
             self.generate_upgrade_menu()
             self.upgrade_cost *= 2
