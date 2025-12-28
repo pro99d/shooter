@@ -3,9 +3,6 @@ import asyncio
 import functools
 import arcade
 import arcade.gl
-import sound_lib
-from sound_lib.stream import FileStream
-from sound_lib.output import Output
 
 sprite_all_draw = arcade.SpriteList()
 def async_func():
