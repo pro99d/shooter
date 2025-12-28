@@ -9,18 +9,18 @@ import math
 
 from arcade.gui import UIManager, UIFlatButton, UIGridLayout, UIAnchorLayout
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
 player_alive = True
 enemy_hp = 10
 enemy_shot = {
-    "bullets": 2,
+    "bullets": 1,
     "reload": 1,
     "damage": 10,
-    "spread": 15,
+    "scatter": 15,
 }
 
 def normalize(pos: Vec2) -> Vec2:
@@ -72,7 +72,7 @@ class Player(Entity):
         self.mass = 1
         self.shoot_prop = {
             "bullets": 1,
-            "spread": 15, # degrees
+            "scatter": 15, # degrees
             "reload": 0.5,
             "lifetime": 0.9,
             "damage": 10
@@ -87,7 +87,7 @@ class Player(Entity):
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
-            s = self.shoot_prop["spread"]/2
+            s = self.shoot_prop["scatter"]/2
             lftime = self.shoot_prop["lifetime"]
             for _ in range(self.shoot_prop["bullets"]):
                 self.bullets.append(
@@ -113,7 +113,7 @@ class Enemy(Player):
     def __init__(self, pos: Vec2, ctx):
         global enemy_shot
         super().__init__(pos, Vec2(50, 50), players, ctx)
-        self.color = (70, 140, 0)
+        self.color = (50, 130, 0)
         self.health = enemy_hp 
         self.shoot_prop.update(enemy_shot)
 
@@ -124,7 +124,7 @@ class Enemy(Player):
         if self.health <= 0:
             enemies.remove(self)
             self.enemies[0].score += 1
-            enemy_hp = 10*math.sqrt(players[0].score)
+            enemy_hp = 10*players[0].score
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
             Vec2(
@@ -143,12 +143,12 @@ class Enemy(Player):
 class Window(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
-                         SCREEN_TITLE, resizable=True, gl_version=(4, 3), fullscreen= True)
+                         SCREEN_TITLE, resizable=False, gl_version=(4, 3), fullscreen= True)
         self.ar = self.width/self.height
         self.total_time = 0.0
         self.bloom = BloomEffect(size=(self.width, self.height))
         self.player = Player(
-            pos=Vec2(x=100, y=100),
+            pos=Vec2(x=self.width/2, y=self.height/2),
             size=Vec2(50, 50),
             enemies= enemies,
             ctx=self.ctx
@@ -156,6 +156,8 @@ class Window(arcade.Window):
         self.fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((self.width, self.height))]
         )
+        self.setup()
+
         self.keys = set()
         self.mouse_pos = Vec2(0, 0)
         self.shoot = False
@@ -164,14 +166,34 @@ class Window(arcade.Window):
         self.last_enemy_spawn = 0
         self.enemy_delay = 2
         players.append(self.player)
-        self.upgrade_cost = 1
-        self.pause = True
 
         self.card_picker_ui: UIManager = UIManager()
         self.card_picker_ui.enable()
-        self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4)
+        self.pause_text = arcade.Text("Pause.", self.width/2, self.height*3/4,font_size= 20)
 
+    def setup(self):
+        global enemy_shot, player_alive, enemies, players, enemy_hp
+        enemy_hp = 10
+        player_alive = True
+        self.player = Player(
+            pos=Vec2(x=self.width/2, y=self.height/2),
+            size=Vec2(50, 50),
+            enemies= enemies,
+            ctx=self.ctx
+        )
+
+        self.upgrade_cost = 1
+        self.pause = True
         self.inv_t = 0
+        enemies.clear()
+        # players = [self.player]
+
+        enemy_shot = {
+            "bullets": 1,
+            "reload": 1,
+            "damage": 10,
+            "scatter": 15,
+        }
 
     def generate_upgrade_menu(self):
         self.card_picker_ui.clear()
@@ -218,12 +240,12 @@ class Window(arcade.Window):
             enemy_shot[en_up['item']] *= en_up['value']
 
     def generate_upgrade(self):
-        item = random.choice(["bullets", "reload", "spread", "damage"])
+        item = random.choice(["bullets", "reload", "scatter", "damage"])
         if item == "bullets":
             value = 2
         elif item == "reload":
             value = 0.75
-        elif item == "spread":
+        elif item == "scatter":
             value = random.uniform(0.75, 1.25)
         elif item == "damage":
             value = 1.25
@@ -275,14 +297,20 @@ class Window(arcade.Window):
         p = self.player.pos
         self.cam.position = [p.x, p.y]
         if p.x < 0:
-            p.x = 0 
+            p.x = 0
+            self.player.velocity.x = 0
+
         if p.x > self.width:
             p.x = self.width
+            self.player.velocity.x = 0
 
         if p.y < 0:
             p.y = 0 
+            self.player.velocity.y = 0
+
         if p.y > self.height:
             p.y = self.height
+            self.player.velocity.y = 0
         player_pos = p
         if self.player.health <= 0:
             player_alive = False
@@ -324,6 +352,7 @@ class Window(arcade.Window):
         self.fbo.clear()
         self.clear()
         self.player.draw()
+        arcade.draw_circle_outline(self.player.pos.x, self.player.pos.y, 50, arcade.color.BLUE, 1)
         for en in enemies:
             en.draw()
         self.ctx.screen.use()
@@ -332,7 +361,7 @@ class Window(arcade.Window):
         arcade.draw_text(f"Health: {round(self.player.health)}/{self.player.max_health}", 10, 10)
         arcade.draw_text(f"Score: {self.player.score}", 10, self.height-15)
         arcade.draw_text(f"Upgrade cost: {self.upgrade_cost}", 10, self.height-30)
-        arcade.draw_text(f"Spread: {self.player.shoot_prop['spread']}", 10, self.height-45)
+        arcade.draw_text(f"Scatter: {self.player.shoot_prop['scatter']}", 10, self.height-45)
         arcade.draw_text(f"Bullet count: {self.player.shoot_prop['bullets']}", 10, self.height-60)
         arcade.draw_text(f"Damage: {self.player.shoot_prop['damage']}", 10, self.height-75)
         arcade.draw_text(f"Reload: {self.player.shoot_prop['reload']}", 10, self.height-90)
@@ -349,11 +378,14 @@ class Window(arcade.Window):
         self.shoot = False
 
     def on_key_press(self, symbol: int, modifiers: int):
+        global player_alive
         if symbol == arcade.key.SPACE:
             self.player.velocity*=5
             self.player.inv = True
             self.inv_t = time.time()
-        if symbol == arcade.key.Q:
+        elif symbol == arcade.key.R and not player_alive:
+            self.setup()
+        elif symbol == arcade.key.Q:
             arcade.close_window()
         elif symbol == arcade.key.P:
             self.pause = not self.pause
