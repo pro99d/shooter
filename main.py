@@ -51,12 +51,13 @@ class Bullet(Entity):
     def update(self, dt, enemy: list):
         self.lifetime+=dt
         super().update(dt)
+        hit = False
         for en in enemy:
             if self.collide(en):
                 if not en.inv:
                     en.health -= self.damage
-                return True
-        return False
+                hit = True
+        return hit
 
 
 class Player(Entity):
@@ -118,15 +119,27 @@ class Enemy(Player):
         self.color = (50, 130, 0)
         self.health = enemy_hp 
         self.shoot_prop.update(enemy_shot)
+    def calculate_new_pos(self, bul_speed, pos, e_speed):
+        dist = math.dist([self.pos.x, self.pos.y], [player_pos.x, player_pos.y])
+        tim = dist/bul_speed
+        np = e_speed*tim + pos
+        return np
 
     def update(self, dt):
         global enemy_hp
-        dp = self.pos-player_pos
+        dp = self.pos-self.calculate_new_pos(
+            bul_speed= 1000,
+            pos= player_pos,
+            e_speed= players[-1].velocity
+        )
+
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
         if self.health <= 0:
             enemies.remove(self)
-            self.enemies[0].score += 1
-            enemy_hp = 10*players[0].score
+            players[-1].score += 1
+            enemy_hp = 10*math.log(players[-1].score+1.25)
+
+        dp = self.pos-player_pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
             Vec2(
@@ -175,9 +188,9 @@ class Window(arcade.Window):
 
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp
-        enemy_hp = 10
         self.enemy_delay = 2
         player_alive = True
+        self.total_time = 0
         self.player = Player(
             pos=Vec2(x=self.width/2, y=self.height/2),
             size=Vec2(50, 50),
@@ -189,7 +202,9 @@ class Window(arcade.Window):
         self.pause = True
         self.inv_t = 0
         enemies.clear()
-        # players = [self.player]
+        enemy_hp = 10
+        players.clear()
+        players.append(self.player)
 
         enemy_shot = {
             "bullets": 1,
@@ -393,6 +408,8 @@ class Window(arcade.Window):
             self.inv_t = time.time()
         elif symbol == arcade.key.R and not player_alive:
             self.setup()
+
+
         elif symbol == arcade.key.Q:
             arcade.close_window()
         elif symbol == arcade.key.P:
@@ -401,12 +418,9 @@ class Window(arcade.Window):
     def on_key_release(self, symbol, *args):
         if symbol in self.keys:
             self.keys.remove(symbol)
-
-
 def main():
     Window()
     arcade.run()
-
 
 if __name__ == "__main__":
     main()
