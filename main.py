@@ -4,7 +4,7 @@ import arcade
 import arcade.gl
 import time
 from arcade.experimental.postprocessing import BloomEffect
-from base_classes import Vec2, Rect, Entity
+from base_classes import Vec2, Rect, Entity, sprite_all_draw
 import math
 
 from arcade.gui import UIManager, UIFlatButton, UIGridLayout, UIAnchorLayout
@@ -22,7 +22,7 @@ enemy_shot = {
     "damage": 10,
     "scatter": 15,
 }
-
+# bullet_draw_rects = arcade.SpriteList()
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
     pos.y -= SCREEN_HEIGHT/2
@@ -30,7 +30,7 @@ def normalize(pos: Vec2) -> Vec2:
     pos.y /= SCREEN_HEIGHT/2
     return pos
 player_pos = Vec2(0, 0)
-
+sprite_all_draw.clear()
 
 
 class Bullet(Entity):
@@ -47,9 +47,11 @@ class Bullet(Entity):
         self.velocity = Vec2(math.cos(angle)*vel, math.sin(angle)*vel)
         self.lifetime = 0
         self.max_lfetime = lifetime
+        # bullet_draw_rects.append(self.rect)
     
     def update(self, dt, enemy: list):
         self.lifetime+=dt
+        # bullet_draw_rects.remove(self.rect)
         super().update(dt)
         hit = False
         for en in enemy:
@@ -57,7 +59,9 @@ class Bullet(Entity):
                 if not en.inv:
                     en.health -= self.damage
                 hit = True
+        # bullet_draw_rects.append(self.rect)
         return hit
+
 
 
 class Player(Entity):
@@ -75,7 +79,7 @@ class Player(Entity):
             "bullets": 1,
             "scatter": 15, # degrees
             "reload": 0.5,
-            "lifetime": 0.9,
+            "lifetime": 2,
             "damage": 10
         }
         self.last_shot = 0
@@ -86,6 +90,14 @@ class Player(Entity):
         self.score = 0
         self.level = 1
         self.inv = False
+        self.stamina = 3
+        self.stamina_max = 3
+        self.last_dash = 0
+
+    def dash(self):
+        if self.stamina >= self.stamina_max:
+            self.velocity *= 5
+            self.stamina = 0
     
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
@@ -100,23 +112,34 @@ class Player(Entity):
     def update(self, dt):
         self.velocity *= 0.95
         super().update(dt)
+        ns = self.stamina + dt
+        if ns > self.stamina_max:
+            self.stamina = self.stamina_max
+        else:
+            self.stamina = ns
         for bul in self.bullets:
             if bul.update(dt, self.enemies):
+                bul.die()
                 self.bullets.remove(bul)
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
+                bul.die()
                 self.bullets.remove(bul)
         self.max_health = 100*(self.level**2/10+1)
+        if time.time()- self.last_dash <= 0.3:
+            self.inv = True
+        else:
+            self.inv = False
 
-    def draw(self):
-        super().draw()
-        for bul in self.bullets:
-            bul.draw()
+    # def draw(self):
+        # super().draw()
+        # for bul in self.bullets:
+            # bul.draw()
 
 class Enemy(Player):
     def __init__(self, pos: Vec2, ctx):
         global enemy_shot
         super().__init__(pos, Vec2(50, 50), players, ctx)
-        self.color = (50, 130, 0)
+        self.rect.color = (50, 130, 0)
         self.health = enemy_hp 
         self.shoot_prop.update(enemy_shot)
     def calculate_new_pos(self, bul_speed, pos, e_speed):
@@ -134,10 +157,6 @@ class Enemy(Player):
         )
 
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
-        if self.health <= 0:
-            enemies.remove(self)
-            players[-1].score += 1
-            enemy_hp = 10*math.log(players[-1].score+1.25)
 
         dp = self.pos-player_pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
@@ -154,6 +173,13 @@ class Enemy(Player):
         else:
             self.velocity = Vec2(0, 0)
         super().update(dt)
+        if self.health <= 0:
+            for bul in self.bullets:
+                bul.die()
+            self.die()
+            enemies.remove(self)
+            players[-1].score += 1
+            enemy_hp = 5*(players[-1].score+2)
             
 class Window(arcade.Window):
     def __init__(self):
@@ -187,7 +213,8 @@ class Window(arcade.Window):
         self.restart_text = arcade.Text("Press R to restart.", self.width/2, self.height*2/4,font_size= 20)
 
     def setup(self):
-        global enemy_shot, player_alive, enemies, players, enemy_hp
+        global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw
+        sprite_all_draw.clear()
         self.enemy_delay = 2
         player_alive = True
         self.total_time = 0
@@ -200,7 +227,6 @@ class Window(arcade.Window):
 
         self.upgrade_cost = 1
         self.pause = True
-        self.inv_t = 0
         enemies.clear()
         enemy_hp = 10
         players.clear()
@@ -359,8 +385,6 @@ class Window(arcade.Window):
             self.player.level += 1
         if self.pause:
             return
-        if time.time() - self.inv_t >= 0.4:
-            self.player.inv = False
         
         self.update_player(dt)
         self.update_enemy(dt)
@@ -372,10 +396,8 @@ class Window(arcade.Window):
         self.fbo.use()
         self.fbo.clear()
         self.clear()
-        self.player.draw()
+        sprite_all_draw.draw()
         arcade.draw_circle_outline(self.player.pos.x, self.player.pos.y, 50, arcade.color.BLUE, 1)
-        for en in enemies:
-            en.draw()
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
         
@@ -403,9 +425,7 @@ class Window(arcade.Window):
     def on_key_press(self, symbol: int, modifiers: int):
         global player_alive
         if symbol == arcade.key.SPACE:
-            self.player.velocity*=5
-            self.player.inv = True
-            self.inv_t = time.time()
+            self.player.dash()
         elif symbol == arcade.key.R and not player_alive:
             self.setup()
 

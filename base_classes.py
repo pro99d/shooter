@@ -2,6 +2,8 @@ import math
 import arcade
 import arcade.gl
 
+sprite_all_draw = arcade.SpriteList()
+
 class Vec2:
     def __init__(self, x: float, y: float) -> None:
         self.x = x
@@ -83,20 +85,31 @@ class Entity:
         self.pos = pos
         self.size = size
         self.angle = 0
-        self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
+        # self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
+        self.rect: arcade.Sprite = arcade.SpriteSolidColor(self.size.x, self.size.y, self.pos.x, self.pos.y, color, self.angle)
+        sprite_all_draw.append(self.rect)
         self.velocity: Vec2 = Vec2(0.0, 0.0)
         self.color = color
-    
-    def draw(self):
-        arcade.draw_rect_filled(self.rect, self.color, self.angle)
+    # def draw(self):
+        # arcade.draw_rect_filled(self.rect, self.color, self.angle)
     
     def update(self, dt: float):
         self.pos += self.velocity*dt
-        self.rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
+        # self.rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
+        self.rect.center_x= self.pos.x
+        self.rect.center_y= self.pos.y
+        self.rect.angle = self.angle
+    
+    def die(self):
+        sprite_all_draw.remove(self.rect)
 
     def update_vel(self, vel: Vec2, max_vel: float= 1.0):
         nv = self.velocity + vel
         if math.sqrt(nv.x**2+nv.y**2) <= max_vel:
             self.velocity = nv
     def collide(self, other: Entity):
-        return bool(self.rect.intersection(other.rect))
+        return bool(self.rect.rect.intersection(other.rect.rect))
+
+class Bar:
+    def __init__(self, pos: Vec2, size: Vec2, color, value, max_value):
+        pass
