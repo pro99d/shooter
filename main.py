@@ -95,7 +95,7 @@ class Player(Entity):
         self.stamina = 3
         self.stamina_max = 3
         self.last_dash = 0
-
+        self.sound_play = set()
     def dash(self):
         if self.stamina >= 1:
             self.velocity *= 5
@@ -111,7 +111,7 @@ class Player(Entity):
                 self.bullets.append(
                     Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime, self.ctx)
                 )
-            self.sounds.shot.play()
+            self.sound_play.add(self.sounds.shot)
             self.last_shot = time.time()
 
     def update(self, dt):
@@ -142,7 +142,11 @@ class Player(Entity):
         else:
             self.inv = False
         if s:
-            self.sounds.explode.play()
+            self.sound_play.add(self.sounds.explode)
+        for sound in self.sound_play:
+            sound.play()
+
+        self.sound_play.clear()
     # def draw(self):
         # super().draw()
         # for bul in self.bullets:
@@ -253,7 +257,7 @@ class Window(arcade.Window):
         self.shoot = False
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
-        self.last_enemy_spawn = 0
+        self.last_enemy_spawn = time.time()
         players.append(self.player)
 
         self.card_picker_ui: UIManager = UIManager()

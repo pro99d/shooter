@@ -1,15 +1,32 @@
 import math
+import asyncio
+import functools
 import arcade
 import arcade.gl
+import sound_lib
+from sound_lib.stream import FileStream
+from sound_lib.output import Output
 
 sprite_all_draw = arcade.SpriteList()
+def async_func():
+    def wrapper(func):
+        @functools.wraps(func)
+        async def wrapped(*args):
+            return await func(*args)
+        return wrapped
+    return wrapper
 
 class SoundPlayer:
     def __init__(self):
+        # output = Output()
+        # self.stream = FileStream(file="example.mp3")
+        # self.stream.play()
+        # self.stream.free()
         self.select = arcade.load_sound("./assets/sounds/JDSherbert/select.wav")
         self.shot = arcade.load_sound("./assets/sounds/JDSherbert/shot.wav")
         self.explode = arcade.load_sound("./assets/sounds/JDSherbert/explode.wav")
         self.dash = arcade.load_sound("./assets/sounds/JDSherbert/dash.wav")
+
 
 class Vec2:
     def __init__(self, x: float, y: float) -> None:
