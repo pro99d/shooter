@@ -3,11 +3,15 @@ import os
 import random
 import sys
 import time
+import threading
+from threading import Thread
+import json
 
 import arcade
 from arcade.experimental.postprocessing import BloomEffect
 import arcade.gl
 from arcade.gui import UIAnchorLayout, UIFlatButton, UIGridLayout, UIManager
+from server_sync import Server, Client
 
 from base_classes import Bar, Entity, Rect, Vec2, sprite_all_draw
 
@@ -17,6 +21,7 @@ SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
 player_alive = True
+playing_sounds = []
 enemy_hp = 10
 enemy_shot = {
     "bullets": 1,
@@ -24,6 +29,7 @@ enemy_shot = {
     "damage": 10,
     "scatter": 15,
 }
+score = 0
 # bullet_draw_rects = arcade.SpriteList()
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -31,17 +37,16 @@ def normalize(pos: Vec2) -> Vec2:
     pos.x /= SCREEN_WIDTH/2
     pos.y /= SCREEN_HEIGHT/2
     return pos
-player_pos = Vec2(0, 0)
+# player_pos = Vec2(0, 0)
 sprite_all_draw.clear()
 
 
 class Bullet(Entity):
-    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float, ctx):
+    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float):
         super().__init__(
             pos= pos,
             size= size,
-            color= (235, 235, 90),
-            ctx= ctx
+            color= (235, 235, 90)
         )
         self.damage = damage
         self.angle = angle 
@@ -67,16 +72,13 @@ class Bullet(Entity):
 
 
 class Player(Entity):
-    def __init__(self, pos: Vec2, size: Vec2, enemies, ctx):
+    def __init__(self, pos: Vec2, size: Vec2, enemies):
         super().__init__(
             pos= pos,
             size= size,
-            color= (0, 255, 0),
-            ctx= ctx
+            color= (0, 255, 0)
         )
         self.enemies = enemies
-        self.ctx = ctx
-        self.mass = 1
         self.shoot_prop = {
             "bullets": 1,
             "scatter": 15, # degrees
@@ -86,7 +88,6 @@ class Player(Entity):
         }
         self.last_shot = 0
         self.bullets = []
-        self.velocity: Vec2 = Vec2(0, 0)
         self.health = 100
         self.max_health = 100
         self.score = 0
@@ -96,6 +97,15 @@ class Player(Entity):
         self.stamina_max = 3
         self.last_dash = 0
         self.sound_play = set()
+    def to_json(self):
+        ed = super().to_json()
+        nd = {
+            "shoot_prop": self.shoot_prop,
+            "last_shot": self.last_shot,
+            "bullets": [bul.to_json() for bul in self.bullets],
+            "inv": self.inv,
+            "stamina": self.stamina
+        }
     def dash(self):
         if self.stamina >= 1:
             self.velocity *= 5
@@ -109,12 +119,13 @@ class Player(Entity):
             lftime = self.shoot_prop["lifetime"]
             for _ in range(self.shoot_prop["bullets"]):
                 self.bullets.append(
-                    Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime, self.ctx)
+                    Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime)
                 )
             self.sound_play.add(self.sounds.shot)
             self.last_shot = time.time()
 
     def update(self, dt):
+        global playing_sounds
         self.velocity *= 0.95
         super().update(dt)
         self.rect.color = (255-255*(max(min(self.health/self.max_health, 1), 0)), 255*(max(min(self.health/self.max_health, 1), 0)), 0)
@@ -144,8 +155,10 @@ class Player(Entity):
         if s:
             self.sound_play.add(self.sounds.explode)
         for sound in self.sound_play:
-            sound.play()
-
+            c = sum([1 if i['s'] == sound else 0 for i in playing_sounds])
+            if c < 5:
+                s = sound.play()
+                playing_sounds.append({"s":sound, "p":s})
         self.sound_play.clear()
     # def draw(self):
         # super().draw()
@@ -153,30 +166,43 @@ class Player(Entity):
             # bul.draw()
 
 class Enemy(Player):
-    def __init__(self, pos: Vec2, ctx):
+    def __init__(self, pos: Vec2):
         global enemy_shot
-        super().__init__(pos, Vec2(50, 50), players, ctx)
+        super().__init__(pos, Vec2(50, 50), players)
         self.rect.color = (50, 130, 0)
         self.health = enemy_hp 
         self.max_health = enemy_hp
         self.shoot_prop.update(enemy_shot)
     def calculate_new_pos(self, bul_speed, pos, e_speed):
-        dist = math.dist([self.pos.x, self.pos.y], [player_pos.x, player_pos.y])
+        dist = math.dist([self.pos.x, self.pos.y], [pos.x, pos.y])
         tim = dist/bul_speed
         np = e_speed*tim + pos
         return np
+    
+    def get_nearest_player(self):
+        global players
+        dist = float("inf")
+        p = None
+        for player in players:
+            d = math.dist((self.pos.x, self.pos.y), (player.pos.x, player.pos.y))
+            if  d <= dist:
+                dist = d
+                p = player
+        return p
+
 
     def update(self, dt):
-        global enemy_hp
+        global enemy_hp, score
+        player = self.get_nearest_player()
         dp = self.pos-self.calculate_new_pos(
             bul_speed= 1000,
-            pos= player_pos,
-            e_speed= players[-1].velocity
+            pos= player.pos,
+            e_speed= player.velocity
         )
 
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
 
-        dp = self.pos-player_pos
+        dp = self.pos-player.pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
             Vec2(
@@ -196,22 +222,26 @@ class Enemy(Player):
             for bul in self.bullets:
                 bul.die()
             self.die()
+            score += 1
+            enemy_hp = 5*(score+2)
+            player.score = score
             enemies.remove(self)
-            players[-1].score += 1
-            enemy_hp = 5*(players[-1].score+2)
             
 class Syncer:
     def __init__(self, wind: Window):
         global players, enemies
         self.wind = wind
         self.multiplayer = "--multiplayer" in sys.argv
+        self.ser = False
         if self.multiplayer:
             self.ip = input("enter ip (localhost): ")
             if not self.ip:
                 self.ip = "localhost"
-            self.port = int(input("enter port (8080): "))
+            self.port = input("enter port (8080): ")
             if not self.port:
                 self.port = 8080
+            else:
+                self.port = int(self.port)
             while True:
                 self.ser = input("server/client (server): ")
                 if not self.ser:
@@ -224,41 +254,108 @@ class Syncer:
                     break
                 else:
                     print("please, enter client or server")
-        self.pause = False
-        self.players = players.copy()
+            if self.ser:
+                self.server = Server(self.port, "udp")
+                self.serv_uuid = self.server.uuid
+                self.serv_thread = Thread(target= self.listen)
+                self.stop_event = threading.Event()
+                self.serv_thread.start()
+            self.running = True
+            self.client: Client = Client(self.ip, self.port, "udp")
             
-    def sync(self):
+            self.pause = False
+            self.players = players.copy()
+            self.enemies = enemies.copy()
+            self.enemy_hp = enemy_hp
+            self.enemy_shot = enemy_shot
+            self.score = score
+            self.player_alive = player_alive
+        
+            self.client.update(
+                {
+                    "pause": self.pause,
+                    "players":self.players,
+                    "enemies":enemies,
+                    "enemy_hp":10,
+                    "enemy_shot":enemy_shot,
+                    "score":self.score,
+                    "player_alive":self.player_alive,
+                }
+            )
+            print(players)
+    
+
+    def stop_thread(self):
+        if self.ser:
+            self.client.clear(self.serv_uuid)
+            self.stop_event.set()
+            self.serv_thread.join()
+    def listen(self):
+        while not self.stop_event.is_set():
+            self.server.listen()
+    def get(self): 
+        global players, player_alive, enemies, enemy_hp, score
+        data = self.client.get()
+        players.clear()
+        player_alive = data["player_alive"] or self.player_alive
+        for pl in data["players"]:
+            players.append(pl)
+        if not self.ser:
+            enemies.clear()
+            for enemy in data['enemies']:
+                enemies.append(enemy)
+            enemy_hp = data['enemy_hp']
+            enemy_shot = data['enemy_shot']
+            self.pause = self.pause or data['pause']
+
+            
+        if data['score'] > self.score:
+            self.score = data['score']
+        self.wind.pause = self.pause
+        score = self.score
+        self.wind.player.score = self.score
+        self.player_alive = player_alive
+
+    def update(self):
         if not self.multiplayer:
             return
         else:
-            print("multiplayer is WIP, skip sync")
-        
+            
+            self.client.update(
+                {
+                    "pause": self.pause,
+                    "players":self.players,
+                    "enemies":enemies,
+                    "enemy_hp":10,
+                    "enemy_shot":enemy_shot,
+                    "score":self.score,
+                    "player_alive":self.player_alive,
+                }
+            )
+
 
 class Window(arcade.Window):
     def __init__(self):
+        #----multiplayer------  
+
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
                          SCREEN_TITLE, resizable=False, gl_version=(4, 3), fullscreen= True)
         self.ar = self.width/self.height
         self.total_time = 0.0
         self.bloom = BloomEffect(size=(self.width, self.height))
-        self.player = Player(
-            pos=Vec2(x=self.width/2, y=self.height/2),
-            size=Vec2(50, 50),
-            enemies= enemies,
-            ctx=self.ctx
-        )
         self.fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((self.width, self.height))]
         )
         self.setup()
-        
+
+
         self.keys = set()
         self.mouse_pos = Vec2(0, 0)
         self.shoot = False
         p = self.player.pos
         self.cam = arcade.Camera2D(position = [p.x, p.y])
         self.last_enemy_spawn = time.time()
-        players.append(self.player)
+        # players.append(self.player)
 
         self.card_picker_ui: UIManager = UIManager()
         self.card_picker_ui.enable()
@@ -267,28 +364,35 @@ class Window(arcade.Window):
         size = Vec2(400, 15)
         self.stamina_bar = Bar(Vec2(0, 20), size, (0, 200, 200), (30, 30, 30), 3, 3)
         self.health_bar = Bar(Vec2(0, 40), size, (200, 0, 0), (30, 30, 30), self.player.health, self.player.max_health)
+        self.syncer = Syncer(self)
+        if self.syncer.multiplayer:
+            if self.syncer.ser:
+                self.syncer.update()
+                print(self.syncer.server.data)
+            else:
+                self.syncer.get()
 
 
     def setup(self):
-        global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw
+        global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw, score
         sprite_all_draw.clear()
         self.enemy_delay = 2
         player_alive = True
         self.total_time = 0
+        if players:
+            players.remove(self.player)
         self.player = Player(
             pos=Vec2(x=self.width/2, y=self.height/2),
             size=Vec2(50, 50),
             enemies= enemies,
-            ctx=self.ctx
         )
 
         self.upgrade_cost = 1
         self.pause = True
         enemies.clear()
         enemy_hp = 10
-        players.clear()
         players.append(self.player)
-
+        score = 0
         enemy_shot = {
             "bullets": 1,
             "reload": 1,
@@ -387,7 +491,6 @@ class Window(arcade.Window):
         self.player.update_vel(dv, acc*10)
     def update_player(self, dt):
         global player_alive
-        global player_pos
         if player_alive:
             self.player_move()
             self.player.update(dt)
@@ -423,15 +526,16 @@ class Window(arcade.Window):
             )
 
             enemies.append(
-                Enemy(pos, self.ctx)
+                Enemy(pos)
             )
             self.last_enemy_spawn = time.time()
         for enemy in enemies:
             enemy.update(dt)
 
     def on_update(self, dt: float):
-        global player_alive
-        global player_pos
+        global player_alive, playing_sounds
+        if self.syncer.multiplayer:
+            self.syncer.get()
         if self.player.score != 0:
             self.enemy_delay = 1/math.sqrt(self.total_time/30)
         if self.player.score >= self.upgrade_cost:
@@ -440,11 +544,17 @@ class Window(arcade.Window):
             self.player.level += 1
         if self.pause:
             return
+        for d in playing_sounds:
+            sound = d['p']
+            if not sound.playing:
+                playing_sounds.remove(d)
         
         self.update_player(dt)
         self.update_enemy(dt)
 
         self.total_time += dt
+        if self.syncer.multiplayer:
+            self.syncer.update()
     def on_draw(self):
         global player_alive
         # self.cam.use()
@@ -485,7 +595,7 @@ class Window(arcade.Window):
         self.shoot = False
 
     def on_key_press(self, symbol: int, modifiers: int):
-        global player_alive
+        global player_alive, server_running
         if symbol == arcade.key.SPACE:
             self.player.dash()
         elif symbol == arcade.key.R and not player_alive:
@@ -494,6 +604,7 @@ class Window(arcade.Window):
 
         elif symbol == arcade.key.Q:
             arcade.close_window()
+            self.syncer.stop_thread()
         elif symbol == arcade.key.P:
             self.pause = not self.pause
         self.keys.add(symbol)

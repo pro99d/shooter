@@ -1,4 +1,5 @@
 import math
+import json
 import asyncio
 import functools
 import arcade
@@ -29,6 +30,8 @@ class Vec2:
     def __init__(self, x: float, y: float) -> None:
         self.x = x
         self.y = y
+    def dict(self):
+        return {"x":self.x, "y":self.y}
 
     def __add__(self, other):
         if isinstance(other, Vec2):
@@ -95,7 +98,7 @@ class Rect:
         self.quad.render(self.prog)
 
 class Entity:
-    def __init__(self, pos: Vec2, size: Vec2, color: tuple[float, float, float], ctx):
+    def __init__(self, pos: Vec2, size: Vec2, color: tuple[float, float, float]):
         self.pos = pos
         self.size = size
         self.angle = 0
@@ -125,6 +128,34 @@ class Entity:
             self.velocity = nv
     def collide(self, other: Entity):
         return bool(self.rect.rect.intersection(other.rect.rect))
+    def to_json(self):
+        data = {
+            "pos": self.pos.dict(),
+            "size": self.size.dict(),
+            "color": self.color,
+            "velocity": self.velocity.dict(),
+            "angle": self.angle
+        }
+        # return json.dumps(
+            # data,
+            # sort_keys=True,
+            # indent=4)
+        return data
+    def from_json(self, d):
+        data = json.loads(d)
+        self.angle = data['angle']
+        v = data['velocity']
+        p = data['pos']
+        s = data['size']
+        self.velocity = Vec2(v['x'], v['y'])
+        self.size = Vec2(s['x'], s['y'])
+        self.pos = Vec2(p['x'], p['y'])
+        self.color = data['color']
+        self.rect.center_x= self.pos.x
+        self.rect.center_y= self.pos.y
+        self.rect.angle = self.angle
+
+
 
 class Bar:
     def __init__(self, pos: Vec2, size: Vec2, color, bg_color, value, max_value):
@@ -144,3 +175,13 @@ class Bar:
         arcade.draw_lbwh_rectangle_filled(self.pos.x, self.pos.y, self.size.x*self.value/self.max_value, self.size.y, self.color)
         arcade.draw_text(f"{round(self.value, 2)}/{round(self.max_value, 2)}", self.text_pos.x, self.text_pos.y)
 
+if __name__ == "__main__":
+    e = Entity(Vec2(0, 0), Vec2(1, 1), [0, 0, 0])
+    js = e.to_json()
+    e.angle = 1.0
+    e.pos = Vec2(1, 2)
+    e.size = Vec2(2, 3)
+    e.color = [1, 2, 3]
+    e.velocity = Vec2(2, 4)
+    e.from_json(js) 
+    print(e.to_json())

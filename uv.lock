@@ -149,7 +149,7 @@ wheels = [
 [[package]]
 name = "server-sync"
 version = "0.1.0"
-source = { git = "https://github.com/pro99d/server-sync#164c29f73483855b777641e98786cf80fe55d00e" }
+source = { git = "https://github.com/pro99d/server-sync#1bbb9da94f2ef371d06a6f917a5a3cf82609f5fc" }
 
 [[package]]
 name = "snakeviz"
