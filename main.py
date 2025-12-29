@@ -21,7 +21,6 @@ SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
 player_alive = True
-playing_sounds = []
 enemy_hp = 10
 enemy_shot = {
     "bullets": 1,
@@ -30,7 +29,35 @@ enemy_shot = {
     "scatter": 15,
 }
 score = 0
-# bullet_draw_rects = arcade.SpriteList()
+
+class SoundManager:
+    def __init__(self, max_concurrent_sounds=20):
+        self.max_concurrent_sounds = max_concurrent_sounds
+        self.playing_sounds = []
+
+    def play_sound(self, sound):
+        self.cleanup_finished_sounds()
+
+        if len(self.playing_sounds) < self.max_concurrent_sounds:
+            player = sound.play()
+            if player:
+                self.playing_sounds.append({"s": sound, "p": player})
+                return player
+        return None
+
+    def cleanup_finished_sounds(self):
+        self.playing_sounds = [d for d in self.playing_sounds if d['p'].playing]
+
+    def clear_all_sounds(self):
+        for sound_dict in self.playing_sounds:
+            try:
+                sound_dict['p'].stop()
+            except:
+                pass
+        self.playing_sounds.clear()
+
+sound_manager = SoundManager(max_concurrent_sounds=2)
+
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
     pos.y -= SCREEN_HEIGHT/2
@@ -49,13 +76,13 @@ class Bullet(Entity):
             color= (235, 235, 90)
         )
         self.damage = damage
-        self.angle = angle 
+        self.angle = angle
         angle = math.radians(-angle-90)
         self.velocity = Vec2(math.cos(angle)*vel, math.sin(angle)*vel)
         self.lifetime = 0
         self.max_lfetime = lifetime
         # bullet_draw_rects.append(self.rect)
-    
+
     def update(self, dt, enemy: list):
         self.lifetime+=dt
         # bullet_draw_rects.remove(self.rect)
@@ -112,7 +139,7 @@ class Player(Entity):
             self.stamina -= 1
             self.last_dash = time.time()
             self.sounds.dash.play()
-    
+
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
             s = self.shoot_prop["scatter"]/2
@@ -125,7 +152,6 @@ class Player(Entity):
             self.last_shot = time.time()
 
     def update(self, dt):
-        global playing_sounds
         self.velocity *= 0.95
         super().update(dt)
         self.rect.color = (255-255*(max(min(self.health/self.max_health, 1), 0)), 255*(max(min(self.health/self.max_health, 1), 0)), 0)
@@ -152,13 +178,10 @@ class Player(Entity):
             self.inv = True
         else:
             self.inv = False
-        if s:
-            self.sound_play.add(self.sounds.explode)
+        # if s:
+            # self.sound_play.add(self.sounds.explode)
         for sound in self.sound_play:
-            c = sum([1 if i['s'] == sound else 0 for i in playing_sounds])
-            if c < 5:
-                s = sound.play()
-                playing_sounds.append({"s":sound, "p":s})
+            sound_manager.play_sound(sound)
         self.sound_play.clear()
     # def draw(self):
         # super().draw()
@@ -170,7 +193,7 @@ class Enemy(Player):
         global enemy_shot
         super().__init__(pos, Vec2(50, 50), players)
         self.rect.color = (50, 130, 0)
-        self.health = enemy_hp 
+        self.health = enemy_hp
         self.max_health = enemy_hp
         self.shoot_prop.update(enemy_shot)
     def calculate_new_pos(self, bul_speed, pos, e_speed):
@@ -178,7 +201,7 @@ class Enemy(Player):
         tim = dist/bul_speed
         np = e_speed*tim + pos
         return np
-    
+
     def get_nearest_player(self):
         global players
         dist = float("inf")
@@ -223,10 +246,10 @@ class Enemy(Player):
                 bul.die()
             self.die()
             score += 1
-            enemy_hp = 5*(score+2)
+            enemy_hp = 5*score+1
             player.score = score
             enemies.remove(self)
-            
+
 class Syncer:
     def __init__(self, wind: Window):
         global players, enemies
@@ -262,7 +285,7 @@ class Syncer:
                 self.serv_thread.start()
             self.running = True
             self.client: Client = Client(self.ip, self.port, "udp")
-            
+
             self.pause = False
             self.players = players.copy()
             self.enemies = enemies.copy()
@@ -270,7 +293,7 @@ class Syncer:
             self.enemy_shot = enemy_shot
             self.score = score
             self.player_alive = player_alive
-        
+
             self.client.update(
                 {
                     "pause": self.pause,
@@ -283,7 +306,7 @@ class Syncer:
                 }
             )
             print(players)
-    
+
 
     def stop_thread(self):
         if self.ser:
@@ -293,7 +316,7 @@ class Syncer:
     def listen(self):
         while not self.stop_event.is_set():
             self.server.listen()
-    def get(self): 
+    def get(self):
         global players, player_alive, enemies, enemy_hp, score
         data = self.client.get()
         players.clear()
@@ -308,7 +331,7 @@ class Syncer:
             enemy_shot = data['enemy_shot']
             self.pause = self.pause or data['pause']
 
-            
+
         if data['score'] > self.score:
             self.score = data['score']
         self.wind.pause = self.pause
@@ -320,7 +343,7 @@ class Syncer:
         if not self.multiplayer:
             return
         else:
-            
+
             self.client.update(
                 {
                     "pause": self.pause,
@@ -336,7 +359,7 @@ class Syncer:
 
 class Window(arcade.Window):
     def __init__(self):
-        #----multiplayer------  
+        #----multiplayer------
 
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
                          SCREEN_TITLE, resizable=False, gl_version=(4, 3), fullscreen= True)
@@ -419,7 +442,7 @@ class Window(arcade.Window):
         anchor_layout.add(but1, anchor_x="center", anchor_y="center", align_y=100)
         anchor_layout.add(but2, anchor_x="center", anchor_y="center")
         anchor_layout.add(but3, anchor_x="center", anchor_y="center", align_y=-100)
-        
+
         @but1.event("on_click")
         def up1(*_):
             self.player.shoot_prop[acts[0]["item"]]*=acts[0]['value']
@@ -458,7 +481,7 @@ class Window(arcade.Window):
         elif item == "damage":
             value = 1.25
         return {"value":value, "item": item}
-        
+
     def on_resize(self, w, h):
         self.ar = w/h
         self.fbo = self.ctx.framebuffer(
@@ -471,7 +494,7 @@ class Window(arcade.Window):
         size.x /= self.width
         size.y /= self.height
         return size
-    
+
     def player_move(self):
         acc = 90
         dv = Vec2(0, 0)
@@ -507,7 +530,7 @@ class Window(arcade.Window):
             self.player.velocity.x = 0
 
         if p.y < 0:
-            p.y = 0 
+            p.y = 0
             self.player.velocity.y = 0
 
         if p.y > self.height:
@@ -533,7 +556,7 @@ class Window(arcade.Window):
             enemy.update(dt)
 
     def on_update(self, dt: float):
-        global player_alive, playing_sounds
+        global player_alive
         if self.syncer.multiplayer:
             self.syncer.get()
         if self.player.score != 0:
@@ -544,11 +567,9 @@ class Window(arcade.Window):
             self.player.level += 1
         if self.pause:
             return
-        for d in playing_sounds:
-            sound = d['p']
-            if not sound.playing:
-                playing_sounds.remove(d)
-        
+        # Clean up finished sounds using the sound manager
+        sound_manager.cleanup_finished_sounds()
+
         self.update_player(dt)
         self.update_enemy(dt)
 
@@ -565,7 +586,7 @@ class Window(arcade.Window):
         arcade.draw_circle_outline(self.player.pos.x, self.player.pos.y, 50, arcade.color.BLUE, 1)
         self.ctx.screen.use()
         self.bloom.render(source= self.fbo.color_attachments[0], target=self.ctx.screen)
-        
+
 
         self.health_bar.value = self.player.health
         self.health_bar.max_value = self.player.max_health
@@ -585,10 +606,10 @@ class Window(arcade.Window):
         if not player_alive:
             self.restart_text.draw()
         self.card_picker_ui.draw()
-    
+
     def on_mouse_motion(self, x, y, *args, **kargs):
         self.mouse_pos = Vec2(x, y)
-    
+
     def on_mouse_press(self, *args):
         self.shoot = True
     def on_mouse_release(self, *args):
