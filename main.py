@@ -38,7 +38,7 @@ for arg in sys.argv:
             MULTIPLAYER = True
         case "--mute-wearpon":
             MUTE_WEARPON = True
-        case _:
+        case "--help":
             print("aviable commands:")
             print("--help: print this message")
             print("--multiplayer: enable multiplayer (WIP)")
@@ -144,6 +144,9 @@ class Player(Entity):
         self.stamina_max = 3
         self.last_dash = 0
         self.sound_play = set()
+        self.w = 1920
+        self.h = 1080
+
     def to_json(self):
         ed = super().to_json()
         nd = {
@@ -153,9 +156,20 @@ class Player(Entity):
             "inv": self.inv,
             "stamina": self.stamina
         }
-    def dash(self):
+    def dash(self, keys):
+
+        dv = Vec2(0, 0)
+        if arcade.key.W in keys:
+            dv += Vec2(0.0, 1)
+        if arcade.key.A in keys:
+            dv += Vec2(-1, 0.0)
+        if arcade.key.S in keys:
+            dv += Vec2(0.0, -1)
+        if arcade.key.D in keys:
+            dv += Vec2(1, 0.0)
+    
         if self.stamina >= 1:
-            self.velocity *= 5
+            self.velocity = dv*4500
             self.stamina -= 1
             self.last_dash = time.time()
             self.sounds.dash.play()
@@ -192,9 +206,10 @@ class Player(Entity):
                     self.bullets.remove(bul)
                 s = True
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
-                sound_manager.play_sound(self.sounds.explode)
                 bul.die()
                 self.bullets.remove(bul)
+        if s and not MUTE_WEARPON:
+            sound_manager.play_sound(self.sounds.explode)
         if time.time()- self.last_dash <= 0.3:
             self.inv = True
         else:
@@ -205,6 +220,19 @@ class Player(Entity):
             for sound in self.sound_play:
                 sound_manager.play_sound(sound)
         self.sound_play.clear()
+        if self.pos.x < 0:
+            self.pos.x = 0
+            self.velocity.x = 0
+        elif self.pos.x > self.w:
+            self.pos.x = self.w
+            self.velocity.x = 0
+
+        if self.pos.y < 0:
+            self.pos.y = 0
+            self.velocity.y = 0
+        elif self.pos.y > self.h:
+            self.pos.y = self.h
+            self.velocity.y = 0
     # def draw(self):
         # super().draw()
         # for bul in self.bullets:
@@ -234,7 +262,13 @@ class Enemy(Player):
                 dist = d
                 p = player
         return p
-
+    
+    def gen_keys(self):
+        keys = set()
+        for key in arcade.key.W, arcade.key.A, arcade.key.S, arcade.key.D:
+            if random.randint(0, 1):
+                keys.add(key)
+        return keys
 
     def update(self, dt):
         global enemy_hp, score
@@ -246,7 +280,8 @@ class Enemy(Player):
         )
 
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
-
+        if random.randint(0, 100) == 0:
+            self.dash(self.gen_keys())
         dp = self.pos-player.pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
@@ -263,14 +298,19 @@ class Enemy(Player):
             self.velocity = Vec2(0, 0)
         super().update(dt)
         self.max_health = enemy_hp
+        if not player_alive:
+            for bul in self.bullets:
+                bul.die()
+            self.die()
+            enemies.remove(self)
         if self.health <= 0:
             for bul in self.bullets:
                 bul.die()
             self.die()
-            score += 1
-            enemy_hp = 5*score+1
-            player.score = score
             enemies.remove(self)
+            score += 1
+            enemy_hp = 8*score+1
+            player.score = score
 
 class Syncer:
     def __init__(self, wind: Window):
@@ -451,7 +491,7 @@ class Window(arcade.Window):
         anchor_layout = UIAnchorLayout()
         self.card_picker_ui.add(anchor_layout)
 
-        acts = [self.generate_upgrade() for _ in range(3)]
+        acts = [self.generate_upgrade(self.player.shoot_prop) for _ in range(3)]
         button_width = self.width // 4  # 1/4 of screen width
         but1 = UIFlatButton(text= f"improve {acts[0]['item']}\n by {round((acts[0]['value']-1)*100, 2)}%", width=button_width, height=50, multiline= True)
         but2 = UIFlatButton(text= f"improve {acts[1]['item']}\n by {round((acts[1]['value']-1)*100, 2)}%", width=button_width, height=50, multiline= True)
@@ -470,7 +510,7 @@ class Window(arcade.Window):
             self.player.shoot_prop[acts[0]["item"]]*=acts[0]['value']
             self.card_picker_ui.clear()
             self.pause = False
-            en_up = self.generate_upgrade()
+            en_up = self.generate_upgrade(enemy_shot)
             enemy_shot[en_up['item']] *= en_up['value']
             self.player.sounds.select.play()
 
@@ -479,7 +519,7 @@ class Window(arcade.Window):
             self.player.shoot_prop[acts[1]["item"]]*=acts[1]['value']
             self.card_picker_ui.clear()
             self.pause = False
-            en_up = self.generate_upgrade()
+            en_up = self.generate_upgrade(enemy_shot)
             enemy_shot[en_up['item']] *= en_up['value']
             self.player.sounds.select.play()
 
@@ -488,12 +528,17 @@ class Window(arcade.Window):
             self.player.shoot_prop[acts[2]["item"]]*=acts[2]['value']
             self.card_picker_ui.clear()
             self.pause = False
-            en_up = self.generate_upgrade()
+            en_up = self.generate_upgrade(enemy_shot)
             enemy_shot[en_up['item']] *= en_up['value']
             self.player.sounds.select.play()
 
-    def generate_upgrade(self):
-        item = random.choice(["bullets", "reload", "scatter", "damage"])
+    def generate_upgrade(self, cur):
+        item = ["scatter", "damage"]
+        if cur['bullets'] <= 16:
+            item.append("bullets")
+        if cur['reload'] > 0.1:
+            item.append("reload")
+        item = random.choice(item)
         if item == "bullets":
             value = 2
         elif item == "reload":
@@ -501,7 +546,7 @@ class Window(arcade.Window):
         elif item == "scatter":
             value = random.uniform(0.75, 1.25)
         elif item == "damage":
-            value = 1.25
+            value = random.uniform(1.25, 1.5)
         return {"value":value, "item": item}
 
     def on_resize(self, w, h):
@@ -623,6 +668,7 @@ class Window(arcade.Window):
         arcade.draw_text(f"Bullet count: {self.player.shoot_prop['bullets']}", 10, self.height-60)
         arcade.draw_text(f"Damage: {self.player.shoot_prop['damage']}", 10, self.height-75)
         arcade.draw_text(f"Reload: {self.player.shoot_prop['reload']}", 10, self.height-90)
+        arcade.draw_text(f"Level: {self.player.level}", 10, self.height-105)
         if self.pause:
             self.pause_text.draw()
         if not player_alive:
@@ -640,7 +686,7 @@ class Window(arcade.Window):
     def on_key_press(self, symbol: int, modifiers: int):
         global player_alive, server_running
         if symbol == arcade.key.SPACE:
-            self.player.dash()
+            self.player.dash(self.keys)
         elif symbol == arcade.key.R and not player_alive:
             self.setup()
 
