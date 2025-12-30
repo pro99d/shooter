@@ -30,13 +30,15 @@ enemy_shot = {
 }
 score = 0
 
+MUTE_WEARPON = "--mute-wearpon" in sys.argv
+
 class SoundManager:
     def __init__(self, max_concurrent_sounds=20):
         self.max_concurrent_sounds = max_concurrent_sounds
         self.playing_sounds = []
 
     def play_sound(self, sound):
-        self.cleanup_finished_sounds()
+        self.clean_sounds()
 
         if len(self.playing_sounds) < self.max_concurrent_sounds:
             player = sound.play()
@@ -45,7 +47,7 @@ class SoundManager:
                 return player
         return None
 
-    def cleanup_finished_sounds(self):
+    def clean_sounds(self):
         self.playing_sounds = [d for d in self.playing_sounds if d['p'].playing]
 
     def clear_all_sounds(self):
@@ -56,7 +58,7 @@ class SoundManager:
                 pass
         self.playing_sounds.clear()
 
-sound_manager = SoundManager(max_concurrent_sounds=2)
+sound_manager = SoundManager(max_concurrent_sounds=25)
 
 def normalize(pos: Vec2) -> Vec2:
     pos.x -= SCREEN_WIDTH/2
@@ -91,8 +93,13 @@ class Bullet(Entity):
         for en in enemy:
             if self.collide(en):
                 if not en.inv:
-                    en.health -= self.damage
-                hit = True
+                    if en.health >- self.damage:
+                        en.health -= self.damage
+                        return False
+                    else:
+                        self.damage -= en.health
+                        en.health = 0
+                    hit = True
         # bullet_draw_rects.append(self.rect)
         return hit
 
@@ -180,8 +187,9 @@ class Player(Entity):
             self.inv = False
         # if s:
             # self.sound_play.add(self.sounds.explode)
-        for sound in self.sound_play:
-            sound_manager.play_sound(sound)
+        if not MUTE_WEARPON:
+            for sound in self.sound_play:
+                sound_manager.play_sound(sound)
         self.sound_play.clear()
     # def draw(self):
         # super().draw()
@@ -568,7 +576,7 @@ class Window(arcade.Window):
         if self.pause:
             return
         # Clean up finished sounds using the sound manager
-        sound_manager.cleanup_finished_sounds()
+        sound_manager.clean_sounds()
 
         self.update_player(dt)
         self.update_enemy(dt)
