@@ -30,7 +30,20 @@ enemy_shot = {
 }
 score = 0
 
-MUTE_WEARPON = "--mute-wearpon" in sys.argv
+MUTE_WEARPON = False
+MULTIPLAYER  = False
+for arg in sys.argv:
+    match arg:
+        case "--multiplayer":
+            MULTIPLAYER = True
+        case "--mute-wearpon":
+            MUTE_WEARPON = True
+        case _:
+            print("aviable commands:")
+            print("--help: print this message")
+            print("--multiplayer: enable multiplayer (WIP)")
+            print("--mute-wearpon: disables wearpon sounds")
+            exit()
 
 class SoundManager:
     def __init__(self, max_concurrent_sounds=20):
@@ -179,6 +192,7 @@ class Player(Entity):
                     self.bullets.remove(bul)
                 s = True
             if bul.lifetime>bul.max_lfetime and bul in self.bullets:
+                sound_manager.play_sound(self.sounds.explode)
                 bul.die()
                 self.bullets.remove(bul)
         if time.time()- self.last_dash <= 0.3:
