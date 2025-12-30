@@ -97,17 +97,35 @@ class Bullet(Entity):
         self.lifetime = 0
         self.max_lfetime = lifetime
         # bullet_draw_rects.append(self.rect)
-
+    def get_nearest_enemy(self, enemies):
+        dist = float("inf")
+        e = None
+        for enemy in enemies:
+            d = math.dist((self.pos.x, self.pos.y), (enemy.pos.x, enemy.pos.y))
+            if  d <= dist:
+                dist = d
+                e = enemy 
+        return e
     def update(self, dt, enemy: list):
         self.lifetime+=dt
         # bullet_draw_rects.remove(self.rect)
+        nearest_enemy = self.get_nearest_enemy(enemy)
+        if nearest_enemy and enemy != players:
+            dp = self.pos-nearest_enemy.pos
+            a = math.atan2(dp.y, dp.x)
+            self.angle = math.degrees(a)
+            a += math.radians(180)
+            v = math.dist((0, 0), self.velocity.__list__())
+            self.velocity = Vec2(math.cos(a), math.sin(a))*v
         super().update(dt)
         hit = False
         for en in enemy:
             if self.collide(en):
                 if not en.inv:
-                    if en.health >- self.damage:
+                    if en.health < self.damage:
+                        h = en.health
                         en.health -= self.damage
+                        self.damage -= h
                         return False
                     else:
                         self.damage -= en.health
@@ -461,7 +479,7 @@ class Window(arcade.Window):
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw, score
         sprite_all_draw.clear()
-        self.enemy_delay = 2
+        self.enemy_delay = 0.5
         player_alive = True
         self.total_time = 0
         if players:
