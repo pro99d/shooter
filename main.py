@@ -109,28 +109,32 @@ class Bullet(Entity):
     def update(self, dt, enemy: list):
         self.lifetime+=dt
         # bullet_draw_rects.remove(self.rect)
-        nearest_enemy = self.get_nearest_enemy(enemy)
-        if nearest_enemy and enemy != players:
-            dp = self.pos-nearest_enemy.pos
-            a = math.atan2(dp.y, dp.x)
-            self.angle = math.degrees(a)
-            a += math.radians(180)
-            v = math.dist((0, 0), self.velocity.__list__())
-            self.velocity = Vec2(math.cos(a), math.sin(a))*v
+        # nearest_enemy = self.get_nearest_enemy(enemy)
+        #auto aim
+        # max_da = 16
+        # dp = self.pos-nearest_enemy.pos
+        # a = math.atan2(dp.y, dp.x)
+        # self.angle = math.degrees(a)
+        # a += math.radians(180)
+        # v = math.dist((0, 0), self.velocity.__list__())
+        # self.velocity = Vec2(math.cos(a), math.sin(a))*v
+
         super().update(dt)
         hit = False
         for en in enemy:
             if self.collide(en):
                 if not en.inv:
-                    if en.health < self.damage:
-                        h = en.health
-                        en.health -= self.damage
-                        self.damage -= h
-                        return False
-                    else:
-                        self.damage -= en.health
-                        en.health = 0
+                    en.health -= self.damage
                     hit = True
+                    # if en.health < self.damage:
+                    #     h = en.health
+                    #     en.health -= self.damage
+                    #     self.damage -= h
+                    #     return False
+                    # else:
+                    #     self.damage -= en.health
+                    #     en.health = 0
+                    # hit = True
         # bullet_draw_rects.append(self.rect)
         return hit
 
@@ -164,6 +168,8 @@ class Player(Entity):
         self.sound_play = set()
         self.w = 1920
         self.h = 1080
+        self.regeneration = 20
+        self.lstscore = 0
 
     def to_json(self):
         ed = super().to_json()
@@ -207,10 +213,6 @@ class Player(Entity):
         self.velocity *= 0.95
         super().update(dt)
         self.rect.color = (255-255*(max(min(self.health/self.max_health, 1), 0)), 255*(max(min(self.health/self.max_health, 1), 0)), 0)
-        if self.health < self.max_health:
-            self.health += self.max_health/10*dt
-        else:
-            self.health = self.max_health
         ns = self.stamina + dt
         if ns > self.stamina_max:
             self.stamina = self.stamina_max
@@ -251,6 +253,13 @@ class Player(Entity):
         elif self.pos.y > self.h:
             self.pos.y = self.h
             self.velocity.y = 0
+        if self.health < self.max_health:
+            if self.level > self.lstscore and self.level % 5 == 0:
+                self.regeneration /= 2
+                self.lstscore = self.level 
+            self.health += self.max_health/self.regeneration*dt
+        else:
+            self.health = self.max_health
     # def draw(self):
         # super().draw()
         # for bul in self.bullets:
@@ -314,7 +323,6 @@ class Enemy(Player):
             self.shoot()
         else:
             self.velocity = Vec2(0, 0)
-        super().update(dt)
         self.max_health = enemy_hp
         if not player_alive:
             for bul in self.bullets:
@@ -325,10 +333,12 @@ class Enemy(Player):
             for bul in self.bullets:
                 bul.die()
             self.die()
-            enemies.remove(self)
+            if self in enemies:
+                enemies.remove(self)
             score += 1
-            enemy_hp = 8*score+1
+            enemy_hp = 7*score+1
             player.score = score
+        super().update(dt)
 
 class Syncer:
     def __init__(self, wind: Window):
@@ -479,7 +489,7 @@ class Window(arcade.Window):
     def setup(self):
         global enemy_shot, player_alive, enemies, players, enemy_hp, sprite_all_draw, score
         sprite_all_draw.clear()
-        self.enemy_delay = 0.5
+        self.enemy_delay = 2
         player_alive = True
         self.total_time = 0
         if players:
@@ -552,9 +562,9 @@ class Window(arcade.Window):
 
     def generate_upgrade(self, cur):
         item = ["scatter", "damage"]
-        if cur['bullets'] <= 16:
+        if cur['bullets'] < 16:
             item.append("bullets")
-        if cur['reload'] > 0.1:
+        if cur['reload'] >= 0.1:
             item.append("reload")
         item = random.choice(item)
         if item == "bullets":
