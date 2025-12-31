@@ -106,9 +106,8 @@ class Bullet(Entity):
                 dist = d
                 e = enemy 
         return e
-    def update(self, dt, enemy: list):
+    def update(self, dt, enemies: list):
         self.lifetime+=dt
-        # bullet_draw_rects.remove(self.rect)
         # nearest_enemy = self.get_nearest_enemy(enemy)
         #auto aim
         # max_da = 16
@@ -121,9 +120,11 @@ class Bullet(Entity):
 
         super().update(dt)
         hit = False
-        for en in enemy:
-            if self.collide(en):
-                if not en.inv:
+        # for en in enemy:
+        en = self.get_nearest_enemy(enemies)
+        if en:
+            if not en.inv:
+                if math.dist(self.pos.__list__(), en.pos.__list__()) <= 60:
                     en.health -= self.damage
                     hit = True
                     # if en.health < self.damage:
@@ -196,18 +197,32 @@ class Player(Entity):
             self.velocity = dv*4500
             self.stamina -= 1
             self.last_dash = time.time()
-            self.sounds.dash.play()
+            return True
+    
+    def _create_bullet(self):
+        s = self.shoot_prop["scatter"]/2
+        lftime = self.shoot_prop["lifetime"]
+        self.bullets.append(
+            Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime)
+        )
+
 
     def shoot(self):
         if time.time()-self.last_shot >= self.shoot_prop["reload"]:
-            s = self.shoot_prop["scatter"]/2
-            lftime = self.shoot_prop["lifetime"]
             for _ in range(self.shoot_prop["bullets"]):
-                self.bullets.append(
-                    Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime)
-                )
+                self._create_bullet()
             self.sound_play.add(self.sounds.shot)
             self.last_shot = time.time()
+    
+    def update_bullet(self, bullet, dt):
+        if bullet.update(dt, self.enemies):
+            bullet.die()
+            if bullet in self.bullets:
+                self.bullets.remove(bullet)
+            s = True
+        if bullet.lifetime>bullet.max_lfetime and bullet in self.bullets:
+            bullet.die()
+            self.bullets.remove(bullet)
 
     def update(self, dt):
         self.velocity *= 0.95
@@ -219,15 +234,8 @@ class Player(Entity):
         else:
             self.stamina = ns
         s = False
-        for bul in self.bullets:
-            if bul.update(dt, self.enemies):
-                bul.die()
-                if bul in self.bullets:
-                    self.bullets.remove(bul)
-                s = True
-            if bul.lifetime>bul.max_lfetime and bul in self.bullets:
-                bul.die()
-                self.bullets.remove(bul)
+        for bullet in self.bullets:
+            self.update_bullet(bullet, dt)
         if s and not MUTE_WEARPON:
             sound_manager.play_sound(self.sounds.explode)
         if time.time()- self.last_dash <= 0.3:
@@ -330,6 +338,7 @@ class Enemy(Player):
             self.die()
             enemies.remove(self)
         if self.health <= 0:
+            self.rect.color = [0, 0, 0]
             for bul in self.bullets:
                 bul.die()
             self.die()
@@ -454,7 +463,6 @@ class Window(arcade.Window):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT,
                          SCREEN_TITLE, resizable=False, gl_version=(4, 3), fullscreen= True)
         self.ar = self.width/self.height
-        self.total_time = 0.0
         self.bloom = BloomEffect(size=(self.width, self.height))
         self.fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((self.width, self.height))]
@@ -491,7 +499,7 @@ class Window(arcade.Window):
         sprite_all_draw.clear()
         self.enemy_delay = 2
         player_alive = True
-        self.total_time = 0
+        self.total_time = 0.0
         if players:
             players.remove(self.player)
         self.player = Player(
@@ -514,6 +522,7 @@ class Window(arcade.Window):
         }
 
     def generate_upgrade_menu(self):
+        self.on_draw()
         self.card_picker_ui.clear()
         self.pause = True
         anchor_layout = UIAnchorLayout()
@@ -712,9 +721,10 @@ class Window(arcade.Window):
         self.shoot = False
 
     def on_key_press(self, symbol: int, modifiers: int):
-        global player_alive, server_running
+        global player_alive
         if symbol == arcade.key.SPACE:
-            self.player.dash(self.keys)
+            if self.player.dash(self.keys):
+                self.player.sounds.dash.play()
         elif symbol == arcade.key.R and not player_alive:
             self.setup()
 
