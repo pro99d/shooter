@@ -104,17 +104,17 @@ class Entity:
         self.size = size
         self.angle = 0
         # self.rect: arcade.rect.Rect = arcade.rect.XYWH(self.pos.x, self.pos.y, self.size.x, self.size.y)
-        if len(waiting_list) > 0:
-            self.rect = waiting_list.pop(0)
-            self.rect.center_x = pos.x
-            self.rect.center_y = pos.y
-            self.rect.size = size.__list__()
-            self.rect.angle = self.angle
-            self.rect.color = color
-            self.rect.rect.resize(size.x, size.y)
-        else:
-            self.rect: arcade.Sprite = arcade.SpriteSolidColor(self.size.x, self.size.y, self.pos.x, self.pos.y, color, self.angle)
-            sprite_all_draw.append(self.rect)
+        # if len(waiting_list) > 0:
+        #     self.rect = waiting_list.pop(0)
+        #     self.rect.center_x = pos.x
+        #     self.rect.center_y = pos.y
+        #     self.rect.size = size.__list__()
+        #     self.rect.angle = self.angle
+        #     self.rect.color = color
+        #     self.rect.rect.resize(size.x, size.y)
+        # else:
+        self.rect: arcade.Sprite = arcade.SpriteSolidColor(self.size.x, self.size.y, self.pos.x, self.pos.y, color, self.angle)
+        sprite_all_draw.append(self.rect)
         self.velocity: Vec2 = Vec2(0.0, 0.0)
         self.color = color
         self.sounds = SoundPlayer()
@@ -132,8 +132,8 @@ class Entity:
         if self.rect in sprite_all_draw:
             self.rect.center_y = -1000
             self.rect.center_x = -1000
-            waiting_list.append(self.rect)
-            # sprite_all_draw.remove(self.rect)
+            # waiting_list.append(self.rect)
+            sprite_all_draw.remove(self.rect)
 
     def update_vel(self, vel: Vec2, max_vel: float= 1.0):
         nv = self.velocity + vel

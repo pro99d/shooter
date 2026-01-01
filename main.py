@@ -32,16 +32,20 @@ score = 0
 
 MUTE_WEARPON = False
 MULTIPLAYER  = False
+DASH = False
 for arg in sys.argv:
     match arg:
         case "--multiplayer":
             MULTIPLAYER = True
+        case "--enemy-dash":
+            DASH = True
         case "--mute-wearpon":
             MUTE_WEARPON = True
         case "--help":
             print("aviable commands:")
             print("--help: print this message")
             print("--multiplayer: enable multiplayer (WIP)")
+            print("--enemy-dash: enable enemy dash. give 2x score")
             print("--mute-wearpon: disables wearpon sounds")
             exit()
 
@@ -315,7 +319,7 @@ class Enemy(Player):
         )
 
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
-        if random.randint(0, 100) == 0:
+        if random.randint(0, 100) == 0 and DASH:
             self.dash(self.gen_keys())
         dp = self.pos-player.pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
@@ -344,7 +348,10 @@ class Enemy(Player):
             self.die()
             if self in enemies:
                 enemies.remove(self)
-            score += 1
+            if not DASH:
+                score += 1
+            else:
+                score += 2
             enemy_hp = 7*score+1
             player.score = score
         super().update(dt)
