@@ -45,7 +45,7 @@ for arg in sys.argv:
             print("aviable commands:")
             print("--help: print this message")
             print("--multiplayer: enable multiplayer (WIP)")
-            print("--enemy-dash: enable enemy dash. give 2x score")
+            print("--enemy-dash: enable enemy dash. give 10x score")
             print("--mute-wearpon: disables wearpon sounds")
             exit()
 
@@ -291,8 +291,7 @@ class Enemy(Player):
         np = e_speed*tim + pos
         return np
 
-    def get_nearest_player(self):
-        global players
+    def get_nearest_player(self, players):
         dist = float("inf")
         p = None
         for player in players:
@@ -311,7 +310,7 @@ class Enemy(Player):
 
     def update(self, dt):
         global enemy_hp, score
-        player = self.get_nearest_player()
+        player = self.get_nearest_player(players)
         dp = self.pos-self.calculate_new_pos(
             bul_speed= 1000,
             pos= player.pos,
@@ -319,8 +318,8 @@ class Enemy(Player):
         )
 
         self.angle = math.degrees(math.atan2(dp.x, dp.y))
-        if random.randint(0, 100) == 0 and DASH:
-            self.dash(self.gen_keys())
+        # if random.randint(0, 100) == 0 and DASH:
+        #     self.dash(self.gen_keys())
         dp = self.pos-player.pos
         r = -math.atan2(dp.x, dp.y)-math.radians(90)
         self.update_vel(
@@ -330,6 +329,12 @@ class Enemy(Player):
             ),
             300
         )
+        for player in players:
+            b = self.get_nearest_player(player.bullets)
+            if not b:
+                continue
+            if math.dist(self.pos.__list__(), b.pos.__list__()) < 100 and DASH and not self.inv:
+                self.dash(self.gen_keys())
 
         if player_alive:
             self.shoot()
@@ -351,7 +356,7 @@ class Enemy(Player):
             if not DASH:
                 score += 1
             else:
-                score += 2
+                score += 10
             enemy_hp = 7*score+1
             player.score = score
         super().update(dt)
