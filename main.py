@@ -20,6 +20,8 @@ SCREEN_HEIGHT = 1080
 SCREEN_TITLE = "Arcade shooter"
 enemies = []
 players = []
+bullets = []
+
 player_alive = True
 enemy_hp = 10
 enemy_shot = {
@@ -45,7 +47,7 @@ for arg in sys.argv:
             print("aviable commands:")
             print("--help: print this message")
             print("--multiplayer: enable multiplayer (WIP)")
-            print("--enemy-dash: enable enemy dash. give 10x score")
+            print("--enemy-dash: enable enemy dash. give 2x score")
             print("--mute-wearpon: disables wearpon sounds")
             exit()
 
@@ -88,12 +90,19 @@ sprite_all_draw.clear()
 
 
 class Bullet(Entity):
-    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float):
+    def __init__(self, pos: Vec2, size: Vec2, vel: float, angle: float, damage: float, lifetime: float, owner):
+        if owner not in players:
+            color = (235, 235, 90)
+        else:
+            color = (235, 155, 90)
+
+
         super().__init__(
             pos= pos,
             size= size,
-            color= (235, 235, 90)
+            color= color
         )
+        self.owner = owner
         self.damage = damage
         self.angle = angle
         angle = math.radians(-angle-90)
@@ -125,6 +134,8 @@ class Bullet(Entity):
         super().update(dt)
         hit = False
         # for en in enemy:
+        if self.owner in enemies:
+            enemies.remove(self.owner)
         en = self.get_nearest_enemy(enemies)
         if en:
             if not en.inv:
@@ -206,8 +217,8 @@ class Player(Entity):
     def _create_bullet(self):
         s = self.shoot_prop["scatter"]/2
         lftime = self.shoot_prop["lifetime"]
-        self.bullets.append(
-            Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime)
+        bullets.append(
+            Bullet(self.pos, Vec2(10, 20), 1000, self.angle+random.uniform(-s, s), self.shoot_prop["damage"], lftime, self)
         )
 
 
@@ -238,8 +249,8 @@ class Player(Entity):
         else:
             self.stamina = ns
         s = False
-        for bullet in self.bullets:
-            self.update_bullet(bullet, dt)
+        # for bullet in self.bullets:
+        #     self.update_bullet(bullet, dt)
         if s and not MUTE_WEARPON:
             sound_manager.play_sound(self.sounds.explode)
         if time.time()- self.last_dash <= 0.3:
@@ -295,6 +306,11 @@ class Enemy(Player):
         dist = float("inf")
         p = None
         for player in players:
+            if player == self:
+                continue
+            if isinstance(player, Bullet):
+                if player.owner == self:
+                    continue
             d = math.dist((self.pos.x, self.pos.y), (player.pos.x, player.pos.y))
             if  d <= dist:
                 dist = d
@@ -329,10 +345,8 @@ class Enemy(Player):
             ),
             300
         )
-        for player in players:
-            b = self.get_nearest_player(player.bullets)
-            if not b:
-                continue
+        b = self.get_nearest_player(bullets)
+        if b:
             if math.dist(self.pos.__list__(), b.pos.__list__()) < 100 and DASH and not self.inv:
                 self.dash(self.gen_keys())
 
@@ -356,7 +370,7 @@ class Enemy(Player):
             if not DASH:
                 score += 1
             else:
-                score += 10
+                score += 2
             enemy_hp = 7*score+1
             player.score = score
         super().update(dt)
@@ -671,10 +685,23 @@ class Window(arcade.Window):
         for enemy in enemies:
             enemy.update(dt)
 
+    def update_bullet(self, bullet, dt):
+        if bullet.update(dt, enemies+players):
+            bullet.die()
+            if bullet in bullets:
+                bullets.remove(bullet)
+            s = True
+        if bullet.lifetime>bullet.max_lfetime and bullet in bullets:
+            bullet.die()
+            if bullet in bullets:
+                bullets.remove(bullet)
     def on_update(self, dt: float):
         global player_alive
         if self.syncer.multiplayer:
             self.syncer.get()
+        if not self.pause:
+            for bullet in bullets:
+                self.update_bullet(bullet, dt)
         if self.player.score != 0:
             self.enemy_delay = 1/math.sqrt(self.total_time/30)
         if self.player.score >= self.upgrade_cost:
@@ -746,6 +773,8 @@ class Window(arcade.Window):
             self.syncer.stop_thread()
         elif symbol == arcade.key.P:
             self.pause = not self.pause
+        if self.pause and symbol not in (arcade.key.W,arcade.key.A,arcade.key.S,arcade.key.D,):
+            self.pause = False
         self.keys.add(symbol)
     def on_key_release(self, symbol, *args):
         if symbol in self.keys:
