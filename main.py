@@ -347,7 +347,7 @@ class Enemy(Player):
         )
         b = self.get_nearest_player(bullets)
         if b:
-            if math.dist(self.pos.__list__(), b.pos.__list__()) < 100 and DASH and not self.inv:
+            if math.dist(self.pos.__list__(), b.pos.__list__()) < 100 and DASH and not self.inv and score > 20:
                 self.dash(self.gen_keys())
 
         if player_alive:
@@ -773,7 +773,7 @@ class Window(arcade.Window):
             self.syncer.stop_thread()
         elif symbol == arcade.key.P:
             self.pause = not self.pause
-        if self.pause and symbol not in (arcade.key.W,arcade.key.A,arcade.key.S,arcade.key.D,):
+        if self.pause and symbol not in (arcade.key.W,arcade.key.A,arcade.key.S,arcade.key.D,arcade.key.SPACE):
             self.pause = False
         self.keys.add(symbol)
     def on_key_release(self, symbol, *args):
