@@ -139,7 +139,7 @@ class Entity:
         nv = self.velocity + vel
         if math.sqrt(nv.x**2+nv.y**2) <= max_vel:
             self.velocity = nv
-    def collide(self, other: Entity):
+    def collide(self, other):
         return bool(self.rect.rect.intersection(other.rect.rect))
     def to_json(self):
         data = {

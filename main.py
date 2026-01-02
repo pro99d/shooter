@@ -110,13 +110,18 @@ class Bullet(Entity):
         self.lifetime = 0
         self.max_lfetime = lifetime
         # bullet_draw_rects.append(self.rect)
+
     def get_nearest_enemy(self, enemies):
-        dist = float("inf")
+        min_dist_sq = float("inf")
         e = None
         for enemy in enemies:
-            d = math.dist((self.pos.x, self.pos.y), (enemy.pos.x, enemy.pos.y))
-            if  d <= dist:
-                dist = d
+            if enemy == self.owner:
+                continue
+            dx = self.pos.x - enemy.pos.x
+            dy = self.pos.y - enemy.pos.y
+            dist_sq = dx*dx+dy*dy
+            if  dist_sq <= min_dist_sq:
+                min_dist_sq = dist_sq
                 e = enemy 
         return e
     def update(self, dt, enemies: list):
@@ -303,7 +308,7 @@ class Enemy(Player):
         return np
 
     def get_nearest_player(self, players):
-        dist = float("inf")
+        min_dist_sq = float("inf")
         p = None
         for player in players:
             if player == self:
@@ -311,9 +316,11 @@ class Enemy(Player):
             if isinstance(player, Bullet):
                 if player.owner == self:
                     continue
-            d = math.dist((self.pos.x, self.pos.y), (player.pos.x, player.pos.y))
-            if  d <= dist:
-                dist = d
+            dx = self.pos.x - player.pos.x
+            dy = self.pos.y - player.pos.y
+            dist_sq = dx*dx+dy*dy
+            if  dist_sq <= min_dist_sq:
+                min_dist_sq = dist_sq
                 p = player
         return p
     
@@ -371,12 +378,16 @@ class Enemy(Player):
                 score += 1
             else:
                 score += 2
-            enemy_hp = 7*score+1
+            if not DASH:
+                enemy_hp = 7*score+1
+            else:
+                enemy_hp = 7*(score/2)+1
+
             player.score = score
         super().update(dt)
 
 class Syncer:
-    def __init__(self, wind: Window):
+    def __init__(self, wind):
         global players, enemies
         self.wind = wind
         self.multiplayer = "--multiplayer" in sys.argv
