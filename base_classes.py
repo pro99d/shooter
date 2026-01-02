@@ -7,13 +7,6 @@ import arcade.gl
 
 sprite_all_draw = arcade.SpriteList()
 waiting_list: list[arcade.SpriteSolidColor] = []
-def async_func():
-    def wrapper(func):
-        @functools.wraps(func)
-        async def wrapped(*args):
-            return await func(*args)
-        return wrapped
-    return wrapper
 
 class SoundPlayer:
     def __init__(self):
